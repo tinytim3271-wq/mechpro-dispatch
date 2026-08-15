@@ -30,5 +30,6 @@ if (githubRepository) {
   new GitHubActionsStack(app, 'MechProGitHubActionsStack', {
     env,
     repository: githubRepository,
+    subject: app.node.tryGetContext('githubSubject'),
   });
 }

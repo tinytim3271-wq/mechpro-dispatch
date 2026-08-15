@@ -4,6 +4,7 @@ import { Construct } from 'constructs';
 
 export interface GitHubActionsStackProps extends StackProps {
   repository: string;
+  subject?: string;
 }
 
 export class GitHubActionsStack extends Stack {
@@ -23,7 +24,7 @@ export class GitHubActionsStack extends Stack {
         'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
       },
       StringLike: {
-        'token.actions.githubusercontent.com:sub': `repo:${props.repository}:environment:production`,
+        'token.actions.githubusercontent.com:sub': props.subject ?? `repo:${props.repository}:environment:production`,
       },
     });
     const role = new iam.Role(this, 'DeployRole', {
