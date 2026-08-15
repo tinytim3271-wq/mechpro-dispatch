@@ -1,0 +1,18 @@
+{
+  "name": "MechPro Dispatch & Work Orders",
+  "short_name": "MechPro",
+  "description": "Dispatch, work orders, customers, invoices, payroll, and shop operations.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fffefb",
+  "theme_color": "#162c24",
+  "icons": [
+    {
+      "src": "./mechpro-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

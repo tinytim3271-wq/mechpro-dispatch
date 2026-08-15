@@ -68,6 +68,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     if (method === 'PUT' && id) {
       const body = JSON.parse(event.body || '{}');
+      const expectedUpdatedAt = event.headers?.['if-match'];
       const item = {
         ...body,
         id,
@@ -78,7 +79,14 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         shopId: ctx.shopId,
         updatedAt: new Date().toISOString(),
       };
-      await ddb.send(new PutCommand({ TableName: TABLE_NAME, Item: item }));
+      await ddb.send(new PutCommand({
+        TableName: TABLE_NAME,
+        Item: item,
+        ...(expectedUpdatedAt ? {
+          ConditionExpression: 'attribute_not_exists(updatedAt) OR updatedAt = :expectedUpdatedAt',
+          ExpressionAttributeValues: { ':expectedUpdatedAt': expectedUpdatedAt },
+        } : {}),
+      }));
       return json(200, item);
     }
 
@@ -90,6 +98,9 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     return json(405, { message: 'Method not allowed' });
   } catch (error) {
     if (error instanceof AuthError) return json(403, { message: error.message });
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
+      return json(409, { message: 'Record changed while this device was offline' });
+    }
     console.error(error);
     return json(500, { message: 'Internal error' });
   }

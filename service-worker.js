@@ -1,0 +1,64 @@
+const CACHE_NAME = 'mechpro-shell-v1';
+const LUCIDE_URL = 'https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js';
+const SHELL_FILES = [
+  './',
+  './index.html',
+  './app.js',
+  './styles.css',
+  './manifest.webmanifest',
+  './mechpro-icon.svg',
+];
+
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE_NAME).then(async cache => {
+    await cache.addAll(SHELL_FILES);
+    await cache.add(LUCIDE_URL).catch(() => undefined);
+  }));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) {
+    if (url.href === LUCIDE_URL) {
+      event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
+    }
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
+          return response;
+        })
+        .catch(() => caches.match('./index.html')),
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then(cached => {
+      const network = fetch(request).then(response => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+        }
+        return response;
+      });
+      return cached || network;
+    }),
+  );
+});

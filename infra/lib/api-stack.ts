@@ -82,7 +82,7 @@ export class ApiStack extends Stack {
     this.httpApi = new apigwv2.HttpApi(this, 'MechProHttpApi', {
       apiName: 'mechpro-api',
       corsPreflight: {
-        allowHeaders: ['Authorization', 'Content-Type'],
+        allowHeaders: ['Authorization', 'Content-Type', 'If-Match'],
         allowMethods: [apigwv2.CorsHttpMethod.ANY],
         allowOrigins: ['*'], // tighten to the deployed CloudFront domain once known
       },
