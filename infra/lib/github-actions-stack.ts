@@ -23,7 +23,7 @@ export class GitHubActionsStack extends Stack {
         'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
       },
       StringLike: {
-        'token.actions.githubusercontent.com:sub': `repo:${props.repository}:ref:refs/heads/main`,
+        'token.actions.githubusercontent.com:sub': `repo:${props.repository}:environment:production`,
       },
     });
     const role = new iam.Role(this, 'DeployRole', {
