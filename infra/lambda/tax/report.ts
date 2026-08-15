@@ -2,8 +2,9 @@ import { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, TABLE_NAME } from '../common/ddb';
 import { requestContext, AuthError } from '../common/auth';
+import { roundCurrency } from '../common/money';
 
-interface PaymentRecord {
+export interface PaymentRecord {
   invoiceNumber: string;
   customer: string;
   amount: number;
@@ -11,7 +12,7 @@ interface PaymentRecord {
   status: string;
 }
 
-interface Invoice {
+export interface Invoice {
   number: string;
   amount: number;
   subtotal?: number;
@@ -20,14 +21,55 @@ interface Invoice {
 }
 
 /** Server-side port of the client tax-report logic in app.js (invoiceTaxBreakdown / taxReport). */
-function invoiceTaxBreakdown(invoice: Invoice | undefined, fallbackRate: number) {
+export function invoiceTaxBreakdown(invoice: Invoice | undefined, fallbackRate: number) {
   if (!invoice) return { subtotal: 0, tax: 0, taxRate: fallbackRate };
   if (typeof invoice.tax === 'number' && typeof invoice.subtotal === 'number') {
     return { subtotal: invoice.subtotal, tax: invoice.tax, taxRate: invoice.taxRate ?? fallbackRate };
   }
-  const subtotal = Math.round((invoice.amount / (1 + fallbackRate / 100)) * 100) / 100;
-  const tax = Math.round((invoice.amount - subtotal) * 100) / 100;
+  const subtotal = roundCurrency(invoice.amount / (1 + fallbackRate / 100));
+  const tax = roundCurrency(invoice.amount - subtotal);
   return { subtotal, tax, taxRate: fallbackRate };
+}
+
+export function buildTaxReport(
+  payments: PaymentRecord[],
+  invoices: Invoice[],
+  fallbackRate: number,
+  from: string,
+  to: string,
+) {
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  toDate.setUTCHours(23, 59, 59, 999);
+  const rows = payments
+    .filter(payment => payment.status === 'completed')
+    .filter(payment => {
+      const date = new Date(payment.receivedAt);
+      return date >= fromDate && date <= toDate;
+    })
+    .map(payment => {
+      const invoice = invoices.find(item => item.number === payment.invoiceNumber);
+      const breakdown = invoiceTaxBreakdown(invoice, fallbackRate);
+      const ratio = invoice ? payment.amount / (invoice.amount || payment.amount) : 0;
+      return {
+        date: payment.receivedAt,
+        invoiceNumber: payment.invoiceNumber,
+        customer: payment.customer,
+        gross: payment.amount,
+        taxable: roundCurrency(breakdown.subtotal * ratio),
+        tax: roundCurrency(breakdown.tax * ratio),
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const totals = rows.reduce(
+    (acc, row) => ({
+      gross: roundCurrency(acc.gross + row.gross),
+      taxable: roundCurrency(acc.taxable + row.taxable),
+      tax: roundCurrency(acc.tax + row.tax),
+    }),
+    { gross: 0, taxable: 0, tax: 0 },
+  );
+  return { rows, totals };
 }
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
@@ -64,35 +106,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     const invoices = (invoicesResult.Items ?? []) as Invoice[];
     const taxSettings = settingsResult.Items?.[0] ?? { state: 'TX', rate: 8.25, taxId: '', filingFrequency: 'Monthly' };
 
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-    toDate.setHours(23, 59, 59, 999);
-
-    const rows = payments
-      .filter(payment => payment.status === 'completed')
-      .filter(payment => {
-        const d = new Date(payment.receivedAt);
-        return d >= fromDate && d <= toDate;
-      })
-      .map(payment => {
-        const invoice = invoices.find(item => item.number === payment.invoiceNumber);
-        const bd = invoiceTaxBreakdown(invoice, taxSettings.rate as number);
-        const ratio = invoice ? payment.amount / (invoice.amount || payment.amount) : 0;
-        return {
-          date: payment.receivedAt,
-          invoiceNumber: payment.invoiceNumber,
-          customer: payment.customer,
-          gross: payment.amount,
-          taxable: Math.round(bd.subtotal * ratio * 100) / 100,
-          tax: Math.round(bd.tax * ratio * 100) / 100,
-        };
-      })
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    const totals = rows.reduce(
-      (acc, row) => ({ gross: acc.gross + row.gross, taxable: acc.taxable + row.taxable, tax: acc.tax + row.tax }),
-      { gross: 0, taxable: 0, tax: 0 },
-    );
+    const { rows, totals } = buildTaxReport(payments, invoices, taxSettings.rate as number, from, to);
 
     return json(200, { from, to, state: taxSettings.state, taxId: taxSettings.taxId, filingFrequency: taxSettings.filingFrequency, rows, totals });
   } catch (error) {
