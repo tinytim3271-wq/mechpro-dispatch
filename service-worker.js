@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mechpro-shell-v1';
+const CACHE_NAME = 'mechpro-shell-v2';
 const LUCIDE_URL = 'https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js';
 const SHELL_FILES = [
   './',
