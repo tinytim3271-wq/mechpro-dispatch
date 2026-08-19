@@ -1,0 +1,23 @@
+{
+  "name": "mechpro-dispatch",
+  "version": "1.0.0",
+  "description": "MechPro Dispatch & Work Orders",
+  "private": true,
+  "scripts": {
+    "copy-web": "cp index.html styles.css app.js service-worker.js manifest.webmanifest mechpro-icon.svg www/ && cp -r assets www/",
+    "sync": "npm run copy-web && npx cap sync android",
+    "open:android": "npx cap open android",
+    "build:android": "npm run sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "lucide": "^0.468.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}
