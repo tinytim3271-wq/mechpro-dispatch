@@ -36,3 +36,7 @@ npm run build:windows            # bundle web app + NSIS installer → dist/wind
 ```
 
 Electron loads `index.html` from disk (`file://`); subscription verification still calls the live API.
+
+### Consolidating Windows folder copies
+
+If you have multiple local MechPro folders on a Windows PC (`C:\mechpro-dispatch`, `C:\MechPro-work`, hash-named copies, OneDrive backups, or git worktrees under `MechPro.worktrees`), see **`docs/MERGE_WINDOWS_FOLDERS.md`**. Run `node scripts/compare-folders.mjs <path>` on Windows/WSL to diff an external folder against this repo. Those paths are **not** present in the Cloud Agent VM unless uploaded or pushed as a branch.
