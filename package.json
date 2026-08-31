@@ -1,0 +1,55 @@
+{
+  "name": "mechpro-desktop",
+  "version": "1.0.0",
+  "description": "MechPro Dispatch & Work Orders Windows desktop client",
+  "main": "desktop/main.js",
+  "author": "MechPro",
+  "license": "UNLICENSED",
+  "scripts": {
+    "desktop": "electron .",
+    "build:windows": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^38.1.2",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.mechpro.dispatch",
+    "productName": "MechPro",
+    "artifactName": "MechPro-Setup-${version}.${ext}",
+    "directories": {
+      "output": "dist/windows"
+    },
+    "files": [
+      "app.js",
+      "index.html",
+      "styles.css",
+      "theme.css",
+      "manifest.webmanifest",
+      "service-worker.js",
+      "mechpro-icon.svg",
+      "assets/**/*",
+      "desktop/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MechPro"
+    }
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1111.0"
+  }
+}

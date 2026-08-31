@@ -67,7 +67,18 @@ export class CdnStack extends Stack {
 
     new s3deploy.BucketDeployment(this, 'DeploySite', {
       sources: [s3deploy.Source.asset(path.join(__dirname, '..', '..'), {
-        exclude: ['infra/**', 'node_modules/**', '.git/**'],
+        exclude: [
+          'infra/**',
+          'desktop/**',
+          'dist/**',
+          'node_modules/**',
+          'package.json',
+          'package-lock.json',
+          'docs/**',
+          '.git/**',
+          '.github/**',
+          '.vscode/**',
+        ],
       })],
       destinationBucket: siteBucket,
       distribution,

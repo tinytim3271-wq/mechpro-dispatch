@@ -2,7 +2,7 @@ import { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
-import { requestContext, AuthError } from '../common/auth';
+import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
 
 const s3 = new S3Client({});
 const BUCKET_NAME = process.env.FILES_BUCKET_NAME as string;
@@ -19,6 +19,7 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
 export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyResultV2> => {
   try {
     const ctx = requestContext(event);
+    await requireActiveAccount(ctx);
     const body = JSON.parse(event.body || '{}');
     const kind = String(body.kind || 'file').replace(/[^a-z0-9-]/gi, '');
     const contentType = String(body.contentType || 'application/octet-stream');
@@ -43,6 +44,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 export const getHandler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyResultV2> => {
   try {
     const ctx = requestContext(event);
+    await requireActiveAccount(ctx);
     const key = event.queryStringParameters?.key;
     if (!key || !key.startsWith(`shops/${ctx.shopId}/`)) return json(403, { message: 'Not authorized for this file' });
     const url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }), { expiresIn: 300 });

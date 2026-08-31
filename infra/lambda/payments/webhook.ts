@@ -1,6 +1,6 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { ddb, TABLE_NAME } from '../common/ddb';
 
@@ -11,16 +11,18 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
 }
 
 /** Verifies Stripe's `Stripe-Signature` header per Stripe's documented HMAC-SHA256 scheme. */
-function verifyStripeSignature(payload: string, signatureHeader: string, webhookSecret: string): boolean {
-  const parts = Object.fromEntries(signatureHeader.split(',').map(part => part.split('=') as [string, string]));
-  const timestamp = parts['t'];
-  const providedSignature = parts['v1'];
-  if (!timestamp || !providedSignature) return false;
+export function verifyStripeSignature(payload: string, signatureHeader: string, webhookSecret: string, nowSeconds = Date.now() / 1000): boolean {
+  const parts = signatureHeader.split(',').map(part => part.split('=', 2) as [string, string]);
+  const timestamp = parts.find(([key]) => key === 't')?.[1];
+  const providedSignatures = parts.filter(([key]) => key === 'v1').map(([, value]) => value);
+  if (!timestamp || !providedSignatures.length || Math.abs(nowSeconds - Number(timestamp)) > 300) return false;
   const signedPayload = `${timestamp}.${payload}`;
   const expected = createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
   const expectedBuf = Buffer.from(expected, 'hex');
-  const providedBuf = Buffer.from(providedSignature, 'hex');
-  return expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf);
+  return providedSignatures.some(providedSignature => {
+    const providedBuf = Buffer.from(providedSignature, 'hex');
+    return expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf);
+  });
 }
 
 /**
@@ -45,27 +47,56 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   if (event_.type === 'checkout.session.completed') {
     const session = event_.data.object;
     const invoiceNumber = session.metadata?.invoiceNumber;
-    if (invoiceNumber) {
+    if (invoiceNumber && session.metadata?.shopId === shopId && session.payment_status === 'paid' && session.currency === 'usd') {
       const pk = `SHOP#${shopId}`;
       const id = session.id as string;
-      await ddb.send(new PutCommand({
+      const existingPayment = await ddb.send(new GetCommand({
         TableName: TABLE_NAME,
-        Item: {
-          pk,
-          sk: `PAYMENT#${id}`,
-          gsi1pk: `${pk}#TYPE#PAYMENT`,
-          gsi1sk: `${new Date().toISOString()}#${id}`,
-          id,
-          invoiceNumber,
-          amount: (session.amount_total || 0) / 100,
-          method: 'processor',
-          processor: 'stripe',
-          processorTransactionId: id,
-          status: 'completed',
-          receivedAt: new Date().toISOString(),
-          shopId,
-        },
+        Key: { pk, sk: `PAYMENT#${id}` },
       }));
+      if (existingPayment.Item) return json(200, { received: true, duplicate: true });
+      const invoiceResult = await ddb.send(new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { pk, sk: `INVOICE#${invoiceNumber}` },
+      }));
+      if (!invoiceResult.Item) return json(400, { message: 'Invoice not found' });
+      const paymentsResult = await ddb.send(new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
+        ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#' },
+        ProjectionExpression: 'invoiceNumber, amount, #status',
+        ExpressionAttributeNames: { '#status': 'status' },
+      }));
+      const alreadyPaid = (paymentsResult.Items ?? [])
+        .filter(payment => payment.invoiceNumber === invoiceNumber && payment.status === 'completed')
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const amount = Number(session.amount_total || 0) / 100;
+      const balance = Math.max(0, Math.round((Number(invoiceResult.Item.amount || 0) - alreadyPaid) * 100) / 100);
+      if (amount <= 0 || amount > balance) return json(400, { message: 'Payment amount exceeds the invoice balance' });
+      try {
+        await ddb.send(new PutCommand({
+          TableName: TABLE_NAME,
+          Item: {
+            pk,
+            sk: `PAYMENT#${id}`,
+            gsi1pk: `${pk}#TYPE#PAYMENT`,
+            gsi1sk: `${new Date().toISOString()}#${id}`,
+            id,
+            invoiceNumber,
+            amount,
+            method: 'processor',
+            processor: 'stripe',
+            processorTransactionId: id,
+            status: 'completed',
+            receivedAt: new Date().toISOString(),
+            shopId,
+          },
+          ConditionExpression: 'attribute_not_exists(pk) AND attribute_not_exists(sk)',
+        }));
+      } catch (error) {
+        if ((error as { name?: string }).name !== 'ConditionalCheckFailedException') throw error;
+        return json(200, { received: true, duplicate: true });
+      }
     }
   }
 
