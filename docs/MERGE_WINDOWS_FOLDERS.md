@@ -36,15 +36,17 @@ The script automatically:
 
 ---
 
-## Cloud Agent status (2026-08-31)
+## Cloud Agent status (2026-08-31, second pass)
 
-A full workspace search found **none** of the Windows paths as uploaded content in the cloud VM. Available sources:
+Re-scanned `/workspace`, `/tmp`, `/home/ubuntu`, uploads, and attachment-like paths. **Still no** `MechPro-work`, `MechPro-dcdaf6e`, `Lees_computer`, or Windows worktree copies on this Linux VM. Available sources:
 
 | Source | Status |
 | --- | --- |
-| `zip/mechpro-dispatch.zip`, `zip/mechpro-dispatch-v15.zip` | Extracted and compared — **legacy Aug 2026 PWA bundles; unified `src/` is a superset** |
-| `cursor/combine-three-folders-ab9b` | Canonical unified repo (this branch, PR #4) |
-| Windows paths (`C:\MechPro-work`, etc.) | **Not accessible from Linux VM** — use `merge-windows.ps1` locally |
+| `zip/mechpro-dispatch.zip`, `zip/mechpro-dispatch-v15.zip` | Re-extracted via `npm run compare-zips` — **legacy Aug 2026 PWA bundles; unified `src/runtime/legacy.js` is newer/larger; zero zip-only features** |
+| `cursor/combine-three-folders-ab9b` | Canonical unified repo (this branch, PR #4); `src/` → `app.js` is the editable frontend |
+| Windows paths (`C:\MechPro-work`, etc.) | **Blocker:** not mounted / not uploaded — run `merge-windows.ps1` on the Windows PC |
+
+**In-repo move completed on this VM:** modular `src/`, Electron `desktop/`, CDK `infra/`, merge scripts, and docs are the single program. Root `app.js` is generated (`npm run build:web`). Live `C:\` folder content still requires a local PowerShell merge.
 
 Run `npm run compare-zips` in the repo to re-verify zip archives anytime.
 
@@ -141,6 +143,7 @@ On the Cloud Agent VM, use a login shell for npm: `bash -lc 'npm run validate'`.
 ## Related
 
 - PR #4: [Unify src, desktop, and infra into one modular MechPro program](https://github.com/tinytim3271-wq/mechpro-dispatch/pull/4)
+- `docs/AUDIT_UNIFIED_MECHPRO.md` — move + full audit report
 - `scripts/merge-windows.ps1` — automated Windows merge
 - `AGENTS.md` — Cloud Agent environment notes
 - `src/README.md` — frontend module layout

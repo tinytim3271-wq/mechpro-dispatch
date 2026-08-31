@@ -9,7 +9,7 @@
     "build:web": "node scripts/build-web.mjs",
     "dev:web": "node scripts/build-web.mjs --watch",
     "serve": "python3 -m http.server 3000 --bind 127.0.0.1",
-    "validate:infra": "bash -lc 'cd infra && npm test -- --runInBand && npm run build'",
+    "validate:infra": "npm --prefix infra test -- --runInBand && npm --prefix infra run build",
     "validate": "npm run build:web && npm run validate:infra",
     "compare-folder": "node scripts/compare-folders.mjs",
     "compare-zips": "node scripts/compare-zips.mjs",
