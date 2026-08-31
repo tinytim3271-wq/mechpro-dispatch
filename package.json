@@ -7,7 +7,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "desktop": "electron .",
-    "build:windows": "electron-builder --win nsis"
+    "build:windows": "electron-builder --win nsis",
+    "test:j2534": "node diagnostics/j2534-host-node/test/host.test.js"
   },
   "devDependencies": {
     "electron": "^38.1.2",
@@ -22,6 +23,7 @@
     },
     "files": [
       "app.js",
+      "diagnostics-ui.js",
       "index.html",
       "styles.css",
       "theme.css",
@@ -29,7 +31,16 @@
       "service-worker.js",
       "mechpro-icon.svg",
       "assets/**/*",
-      "desktop/**/*"
+      "desktop/**/*",
+      "diagnostics/j2534-host-node/**/*",
+      "diagnostics/coverage/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "diagnostics/j2534-host-node",
+        "to": "j2534-host-node",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
       "target": [
