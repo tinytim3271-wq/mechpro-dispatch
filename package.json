@@ -6,12 +6,15 @@
   "author": "MechPro",
   "license": "UNLICENSED",
   "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "dev:web": "node scripts/build-web.mjs --watch",
     "desktop": "electron .",
-    "build:windows": "electron-builder --win nsis"
+    "build:windows": "npm run build:web && electron-builder --win nsis"
   },
   "devDependencies": {
     "electron": "^38.1.2",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.12"
   },
   "build": {
     "appId": "com.mechpro.dispatch",
