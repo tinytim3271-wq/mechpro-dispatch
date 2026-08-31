@@ -1,4 +1,34 @@
 (() => {
+  // src/shared/config.js
+  var cognitoConfig = Object.freeze({
+    region: "us-east-1",
+    userPoolId: "us-east-1_Ng8TxYJkm",
+    clientId: "3l8ocn4271f12hn6l0g30r8alc",
+    apiUrl: "https://njz0co209l.execute-api.us-east-1.amazonaws.com"
+  });
+  var storageKeys = Object.freeze({
+    dispatch: "mechpro-dispatch-v1",
+    session: "mechpro-session",
+    mutationQueue: "mechpro-mutation-queue-v1"
+  });
+
+  // src/modules/platform/detect.js
+  var isDesktopApp = Boolean(window.mechproDesktop);
+  var DESKTOP_ENTITLEMENT_INTERVAL = 5 * 60 * 1e3;
+  var platform = Object.freeze({
+    kind: isDesktopApp ? "desktop" : "web",
+    isDesktop: isDesktopApp,
+    isWeb: !isDesktopApp,
+    electronVersion: window.mechproDesktop?.version ?? null,
+    os: window.mechproDesktop?.platform ?? null
+  });
+
+  // src/modules/platform/index.js
+  function initPlatform() {
+    window.__MECHPRO_PLATFORM__ = platform;
+  }
+  initPlatform();
+
   // src/modules/register.js
   function registerModules() {
   }
@@ -216,10 +246,6 @@
   }
   function aiKeywords(text) {
     return String(text || "").toLowerCase();
-  }
-  function diagnoseLocal(vehicle, symptoms, dtc) {
-    const source = aiKeywords(`${symptoms} ${dtc}`), misfire = /misfire|p030|rough|shake/.test(source), brake = /brake|grind|vibrat/.test(source), ac = /a\/c|warm|cooling/.test(source), causes = misfire ? [{ cause: "Ignition coil, spark plug, or cylinder misfire", likelihood: "High", explanation: "Rough running and common P030x patterns point first to ignition and cylinder contribution testing." }, { cause: "Vacuum leak or unmetered air", likelihood: "Medium", explanation: "Lean conditions can create unstable idle and intermittent misfire symptoms." }, { cause: "Fuel injector delivery issue", likelihood: "Low", explanation: "Verify injector pulse and balance after primary ignition checks." }] : brake ? [{ cause: "Worn pads or uneven rotor thickness", likelihood: "High", explanation: "Grinding and pedal pulsation commonly follow pad wear and rotor runout." }, { cause: "Caliper slide or piston restriction", likelihood: "Medium", explanation: "A restricted caliper can overheat a rotor and cause uneven braking." }] : ac ? [{ cause: "Condenser fan or airflow fault", likelihood: "High", explanation: "Cooling improves while moving when idle airflow is insufficient." }, { cause: "Low refrigerant charge or system leak", likelihood: "Medium", explanation: "Verify pressures and inspect for dye before charging." }] : [{ cause: "Initial system inspection required", likelihood: "Medium", explanation: "The complaint needs baseline visual inspection and scan data before a root cause is confirmed." }, { cause: "Electrical connection or sensor fault", likelihood: "Low", explanation: "Confirm power, ground, and live data against specifications." }];
-    return { kind: "diagnostics", vehicle, symptoms, dtc, causes, tests: misfire ? ["Scan all modules and record freeze-frame data", "Inspect plugs, boots, and coils; swap suspect coil if appropriate", "Perform cylinder contribution and fuel-trim review", "Smoke-test intake for vacuum leaks"] : brake ? ["Measure pad thickness and rotor runout", "Inspect caliper slides, piston boots, and brake hose condition", "Road-test after repair to verify pedal feel"] : ac ? ["Verify static and running A/C pressures", "Command condenser fan and confirm airflow at idle", "Inspect compressor clutch and leak indicators"] : ["Perform visual inspection and verify fluid levels", "Scan for stored and pending diagnostic trouble codes", "Confirm power, ground, and signal at affected components"], urgency: brake ? "Immediate" : misfire ? "Soon" : ac ? "Soon" : "Monitor", hours: brake ? 2 : misfire ? 1.5 : ac ? 1.5 : 1, notes: `Use OEM service information and ${vehicle} specifications before authorizing repair.` };
   }
   function estimateLocal(vehicle, service, notes = "") {
     const source = aiKeywords(`${service} ${notes}`), laborRate = 165, brake = /brake|rotor|pad/.test(source), oil = /oil|lube/.test(source), ac = /a\/c|air.?condition/.test(source), lines = brake ? [{ service: "Front brake pads and rotor service", hours: 2, parts: 285, notes: "Includes hardware inspection and brake bedding road test." }] : oil ? [{ service: "Synthetic oil and filter service", hours: 0.5, parts: 68, notes: "Includes multipoint inspection and fluid top-off." }] : ac ? [{ service: "A/C performance diagnosis", hours: 1.5, parts: 35, notes: "Pressure test and airflow inspection; repair parts quoted after diagnosis." }] : [{ service, hours: 1.5, parts: 110, notes: "Preliminary estimate; verify condition and part fitment before approval." }];
@@ -498,17 +524,17 @@
     state.users = sanitizeUsers(state.users);
     localStorage.setItem(STORE, JSON.stringify(state));
   }
-  var cognitoConfig = { region: "us-east-1", userPoolId: "us-east-1_Ng8TxYJkm", clientId: "3l8ocn4271f12hn6l0g30r8alc", apiUrl: "https://njz0co209l.execute-api.us-east-1.amazonaws.com" };
-  var isDesktopApp = Boolean(window.mechproDesktop);
-  var DESKTOP_ENTITLEMENT_INTERVAL = 5 * 60 * 1e3;
-  var desktopEntitlementVerified = !isDesktopApp;
+  var cognitoConfig2 = window.__MECHPRO_CONFIG__?.cognito || { region: "us-east-1", userPoolId: "us-east-1_Ng8TxYJkm", clientId: "3l8ocn4271f12hn6l0g30r8alc", apiUrl: "https://njz0co209l.execute-api.us-east-1.amazonaws.com" };
+  var isDesktopApp2 = window.__MECHPRO_PLATFORM__?.isDesktop ?? Boolean(window.mechproDesktop);
+  var DESKTOP_ENTITLEMENT_INTERVAL2 = 5 * 60 * 1e3;
+  var desktopEntitlementVerified = !isDesktopApp2;
   var desktopLoginMessage = "";
   function decodeJwt(token) {
     const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     return JSON.parse(decodeURIComponent(atob(payload).split("").map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0")).join("")));
   }
   async function cognitoSignIn(email, password) {
-    const response = await fetch(`https://cognito-idp.${cognitoConfig.region}.amazonaws.com/`, { method: "POST", headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" }, body: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: cognitoConfig.clientId, AuthParameters: { USERNAME: email, PASSWORD: password } }) });
+    const response = await fetch(`https://cognito-idp.${cognitoConfig2.region}.amazonaws.com/`, { method: "POST", headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" }, body: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: cognitoConfig2.clientId, AuthParameters: { USERNAME: email, PASSWORD: password } }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Sign-in failed");
     return data;
@@ -532,7 +558,7 @@
         }
         button.disabled = true;
         try {
-          const response = await fetch(`https://cognito-idp.${cognitoConfig.region}.amazonaws.com/`, { method: "POST", headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.RespondToAuthChallenge" }, body: JSON.stringify({ ClientId: cognitoConfig.clientId, ChallengeName: "NEW_PASSWORD_REQUIRED", Session: challenge.Session, ChallengeResponses: { USERNAME: challenge.ChallengeParameters.USER_ID_FOR_SRP || email, NEW_PASSWORD: data.password } }) }), result = await response.json();
+          const response = await fetch(`https://cognito-idp.${cognitoConfig2.region}.amazonaws.com/`, { method: "POST", headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.RespondToAuthChallenge" }, body: JSON.stringify({ ClientId: cognitoConfig2.clientId, ChallengeName: "NEW_PASSWORD_REQUIRED", Session: challenge.Session, ChallengeResponses: { USERNAME: challenge.ChallengeParameters.USER_ID_FOR_SRP || email, NEW_PASSWORD: data.password } }) }), result = await response.json();
           if (!response.ok) throw new Error(result.message || "Password could not be set");
           closeModal();
           resolve(result.AuthenticationResult);
@@ -627,10 +653,10 @@
   async function authorizedApiRequest(path, options = {}) {
     const session = authSession();
     if (!session) throw new Error("Not signed in");
-    return fetch(`${cognitoConfig.apiUrl}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.idToken}`, ...options.headers || {} } });
+    return fetch(`${cognitoConfig2.apiUrl}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.idToken}`, ...options.headers || {} } });
   }
   async function verifyDesktopEntitlement() {
-    if (!isDesktopApp) return true;
+    if (!isDesktopApp2) return true;
     if (!navigator.onLine) throw new Error("MechPro Desktop requires an internet connection to verify your subscription.");
     let response;
     try {
@@ -1142,7 +1168,7 @@
     return shell(`${heading("Connected workflow", "Shop operations", "Linked vehicles, inspections, stock, service templates, reminders, vendors, and basic OBD-II tools.", false)}<div class="accounting-tabs ops-tabs">${tabs.map((tab) => `<button class="tab ${shopOpsTab === tab[0] ? "active" : ""}" data-ops-tab="${tab[0]}">${tab[1]}</button>`).join("")}</div>${view()}`);
   }
   function openVehicleForm(existing = null) {
-    showModal(`<form class="modal" id="vehicle-form"><div class="modal-head"><h2>${existing ? "Edit" : "Add linked"} vehicle</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="form-grid"><label>Owner<select name="customer" required>${customerOptions(existing?.customer)}</select></label><label>VIN<input name="vin" maxlength="17" pattern="[A-HJ-NPR-Z0-9]{17}" value="${escapeHtml(existing?.vin || "")}"/></label><div class="full vin-actions"><button class="secondary" type="button" id="decode-vin">${icon("scan-line", 14)} Decode VIN with NHTSA</button><span id="vin-status"></span></div><label>Year<input name="year" required value="${escapeHtml(existing?.year || "")}"/></label><label>Make<input name="make" required value="${escapeHtml(existing?.make || "")}"/></label><label>Model<input name="model" required value="${escapeHtml(existing?.model || "")}"/></label><label>Trim<input name="trim" value="${escapeHtml(existing?.trim || "")}"/></label><label>Plate<input name="plate" value="${escapeHtml(existing?.plate || "")}"/></label><label>Mileage<input name="mileage" type="number" min="0" value="${existing?.mileage || ""}"/></label><label>Next service date<input name="nextServiceDate" type="date" value="${existing?.nextServiceDate || ""}"/></label><label class="full">Notes<textarea name="notes">${escapeHtml(existing?.notes || "")}</textarea></label><label class="full">Vehicle photos<input name="photos" type="file" accept="image/*" multiple/></label>${(existing?.photoKeys || []).length ? `<div class="full vehicle-photo-thumbs">${existing.photoKeys.map((key) => `<img src="${cognitoConfig.apiUrl}/files/${encodeURIComponent(key)}" alt="Vehicle photo" class="vehicle-thumb"/>`).join("")}</div>` : ""}</div></div><div class="modal-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">Save vehicle</button></div></form>`);
+    showModal(`<form class="modal" id="vehicle-form"><div class="modal-head"><h2>${existing ? "Edit" : "Add linked"} vehicle</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="form-grid"><label>Owner<select name="customer" required>${customerOptions(existing?.customer)}</select></label><label>VIN<input name="vin" maxlength="17" pattern="[A-HJ-NPR-Z0-9]{17}" value="${escapeHtml(existing?.vin || "")}"/></label><div class="full vin-actions"><button class="secondary" type="button" id="decode-vin">${icon("scan-line", 14)} Decode VIN with NHTSA</button><span id="vin-status"></span></div><label>Year<input name="year" required value="${escapeHtml(existing?.year || "")}"/></label><label>Make<input name="make" required value="${escapeHtml(existing?.make || "")}"/></label><label>Model<input name="model" required value="${escapeHtml(existing?.model || "")}"/></label><label>Trim<input name="trim" value="${escapeHtml(existing?.trim || "")}"/></label><label>Plate<input name="plate" value="${escapeHtml(existing?.plate || "")}"/></label><label>Mileage<input name="mileage" type="number" min="0" value="${existing?.mileage || ""}"/></label><label>Next service date<input name="nextServiceDate" type="date" value="${existing?.nextServiceDate || ""}"/></label><label class="full">Notes<textarea name="notes">${escapeHtml(existing?.notes || "")}</textarea></label><label class="full">Vehicle photos<input name="photos" type="file" accept="image/*" multiple/></label>${(existing?.photoKeys || []).length ? `<div class="full vehicle-photo-thumbs">${existing.photoKeys.map((key) => `<img src="${cognitoConfig2.apiUrl}/files/${encodeURIComponent(key)}" alt="Vehicle photo" class="vehicle-thumb"/>`).join("")}</div>` : ""}</div></div><div class="modal-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">Save vehicle</button></div></form>`);
     const form = document.querySelector("#vehicle-form");
     document.querySelector("#decode-vin").onclick = async () => {
       const vin = form.elements.vin.value.trim().toUpperCase(), s = document.querySelector("#vin-status");
@@ -1220,7 +1246,7 @@
     return (inspection.approvalHistory || []).map((entry) => `<div class="approval-entry"><span class="badge ${entry.status === "approved" ? "paid" : entry.status === "rejected" ? "overdue" : "estimate"}">${escapeHtml(entry.status)}</span><span>${escapeHtml(entry.actorName || "Unknown")} \xB7 ${new Date(entry.timestamp).toLocaleString()}</span>${entry.note ? `<small>${escapeHtml(entry.note)}</small>` : ""}</div>`).join("");
   }
   function printInspectionReport(inspection) {
-    const profile = shopProfile(), counts = (inspection.items || []).reduce((t, r) => (t[r.status] = (t[r.status] || 0) + 1, t), {}), itemRows = (inspection.items || []).map((item) => `<tr><td>${escapeHtml(item.name)}</td><td class="${item.status}">${item.status === "pass" ? "Pass" : item.status === "attention" ? "Attention" : item.status === "fail" ? "Fail" : "Not checked"}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join(""), photoHtml = (inspection.photoKeys || []).map((key) => `<img src="${cognitoConfig.apiUrl}/files/${encodeURIComponent(key)}" style="width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ddd"/>`).join(" "), damageHtml = (inspection.damageZones || []).length ? `<p><b>Damage zones:</b> ${inspection.damageZones.map(escapeHtml).join(", ")}</p>` : "", approvalHtml = (inspection.approvalHistory || []).map((entry) => `<tr><td>${escapeHtml(entry.status)}</td><td>${escapeHtml(entry.actorName || "")}</td><td>${new Date(entry.timestamp).toLocaleString()}</td><td>${escapeHtml(entry.note || "")}</td></tr>`).join(""), win = window.open("", "_blank");
+    const profile = shopProfile(), counts = (inspection.items || []).reduce((t, r) => (t[r.status] = (t[r.status] || 0) + 1, t), {}), itemRows = (inspection.items || []).map((item) => `<tr><td>${escapeHtml(item.name)}</td><td class="${item.status}">${item.status === "pass" ? "Pass" : item.status === "attention" ? "Attention" : item.status === "fail" ? "Fail" : "Not checked"}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join(""), photoHtml = (inspection.photoKeys || []).map((key) => `<img src="${cognitoConfig2.apiUrl}/files/${encodeURIComponent(key)}" style="width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ddd"/>`).join(" "), damageHtml = (inspection.damageZones || []).length ? `<p><b>Damage zones:</b> ${inspection.damageZones.map(escapeHtml).join(", ")}</p>` : "", approvalHtml = (inspection.approvalHistory || []).map((entry) => `<tr><td>${escapeHtml(entry.status)}</td><td>${escapeHtml(entry.actorName || "")}</td><td>${new Date(entry.timestamp).toLocaleString()}</td><td>${escapeHtml(entry.note || "")}</td></tr>`).join(""), win = window.open("", "_blank");
     win.document.write(`<!DOCTYPE html><html><head><title>Inspection ${inspection.number}</title><style>body{font:12px/1.6 system-ui,sans-serif;max-width:900px;margin:auto;padding:20px}h1{font-size:20px}h2{font-size:16px;margin-top:18px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{padding:5px 8px;border:1px solid #ddd;text-align:left;font-size:11px}th{background:#f5f5f5}.pass{color:#087e6a;font-weight:700}.attention{color:#e2a524;font-weight:700}.fail{color:#d64b4b;font-weight:700}.not_checked{color:#999}img{margin:4px}@media print{button{display:none}}</style></head><body><h1>${escapeHtml(profile.shopName)}</h1><p>${escapeHtml(profile.address || "")} \xB7 ${escapeHtml(profile.phone || "")}</p><h2>Digital Inspection Report: ${escapeHtml(inspection.number)}</h2><p><b>Vehicle:</b> ${escapeHtml(inspection.vehicle)} \xB7 <b>Customer:</b> ${escapeHtml(inspection.customer)}</p><p><b>Date:</b> ${new Date(inspection.createdAt).toLocaleDateString()} \xB7 <b>Work Order:</b> ${escapeHtml(inspection.workOrderId || "Unlinked")}</p><p><b>Results:</b> ${counts.pass || 0} pass \xB7 ${counts.attention || 0} attention \xB7 ${counts.fail || 0} fail</p>${damageHtml}<table><thead><tr><th>Item</th><th>Status</th><th>Notes</th></tr></thead><tbody>${itemRows}</tbody></table>${inspection.recommendations ? `<h2>Recommendations</h2><p>${escapeHtml(inspection.recommendations)}</p>` : ""} ${photoHtml ? `<h2>Photos</h2><div>${photoHtml}</div>` : ""} ${approvalHtml ? `<h2>Approval History</h2><table><thead><tr><th>Decision</th><th>By</th><th>Date</th><th>Note</th></tr></thead><tbody>${approvalHtml}</tbody></table>` : ""}<p style="margin-top:18px;color:#999">Generated ${(/* @__PURE__ */ new Date()).toLocaleString()}</p><button onclick="window.print()">Print</button></body></html>`);
     win.document.close();
   }
@@ -1252,7 +1278,7 @@ ${inspection.recommendations ? `Recommendations: ${inspection.recommendations}
     };
   }
   function openInspectionForm(existing = null) {
-    const vehicleOptions = state.vehicles.map((vehicle) => `<option value="${escapeHtml(vehicle.id)}" ${existing?.vehicleId === vehicle.id ? "selected" : ""}>${escapeHtml(vehicle.customer)} \xB7 ${escapeHtml(vehicleLabel(vehicle))}</option>`).join(""), templateOptions = `<option value="default">Default ${inspectionPoints.length}-point checklist</option>${state.inspectionTemplates.map((tpl) => `<option value="${escapeHtml(tpl.id)}">${escapeHtml(tpl.name)} (${(tpl.items || []).length} points)</option>`).join("")}`, items = existing?.items || inspectionPoints.map((name) => ({ name, status: "not_checked", note: "" })), zones = ["Front", "Rear", "Driver side", "Passenger side", "Roof", "Glass"], damage = new Set(existing?.damageZones || []), existingPhotos = (existing?.photoKeys || []).map((key) => `<img src="${cognitoConfig.apiUrl}/files/${encodeURIComponent(key)}" alt="Inspection photo" class="vehicle-thumb"/>`).join("");
+    const vehicleOptions = state.vehicles.map((vehicle) => `<option value="${escapeHtml(vehicle.id)}" ${existing?.vehicleId === vehicle.id ? "selected" : ""}>${escapeHtml(vehicle.customer)} \xB7 ${escapeHtml(vehicleLabel(vehicle))}</option>`).join(""), templateOptions = `<option value="default">Default ${inspectionPoints.length}-point checklist</option>${state.inspectionTemplates.map((tpl) => `<option value="${escapeHtml(tpl.id)}">${escapeHtml(tpl.name)} (${(tpl.items || []).length} points)</option>`).join("")}`, items = existing?.items || inspectionPoints.map((name) => ({ name, status: "not_checked", note: "" })), zones = ["Front", "Rear", "Driver side", "Passenger side", "Roof", "Glass"], damage = new Set(existing?.damageZones || []), existingPhotos = (existing?.photoKeys || []).map((key) => `<img src="${cognitoConfig2.apiUrl}/files/${encodeURIComponent(key)}" alt="Inspection photo" class="vehicle-thumb"/>`).join("");
     showModal(`<form class="modal wide" id="inspection-form"><div class="modal-head"><h2>${existing ? "Edit" : "New"} digital inspection</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="form-grid"><label>Vehicle<select name="vehicleId" required>${vehicleOptions}</select></label><label>Work order<select name="workOrderId"><option value="">Unlinked</option>${state.orders.map((order) => `<option ${existing?.workOrderId === order.id ? "selected" : ""}>${order.id}</option>`).join("")}</select></label>${!existing ? `<label>Template<select name="templateId" id="template-picker">${templateOptions}</select></label>` : ""}</div><h3>Damage diagram</h3><div class="damage-zones">${zones.map((zone) => `<button type="button" class="damage-zone ${damage.has(zone) ? "marked" : ""}" data-damage-zone="${zone}">${icon(damage.has(zone) ? "alert-triangle" : "check", 13)} ${zone}</button>`).join("")}</div><h3 id="checklist-heading">${items.length}-point checklist</h3><div class="inspection-grid" id="inspection-checklist">${items.map((item, index) => `<article><b>${escapeHtml(item.name)}</b><select name="status-${index}"><option value="not_checked" ${item.status === "not_checked" ? "selected" : ""}>Not checked</option><option value="pass" ${item.status === "pass" ? "selected" : ""}>Pass</option><option value="attention" ${item.status === "attention" ? "selected" : ""}>Needs attention</option><option value="fail" ${item.status === "fail" ? "selected" : ""}>Fail</option></select><input name="note-${index}" value="${escapeHtml(item.note || "")}" placeholder="Reading or note"/></article>`).join("")}</div><label>Inspection photos<input name="photos" type="file" accept="image/*" multiple/></label>${existingPhotos ? `<div class="vehicle-photo-thumbs">${existingPhotos}</div>` : ""}<label>Recommendations<textarea name="recommendations">${escapeHtml(existing?.recommendations || "")}</textarea></label>${existing ? `<div class="inspection-report-actions"><button type="button" class="secondary" id="print-inspection">${icon("printer", 14)} Print report</button><button type="button" class="secondary" id="share-inspection">${icon("share-2", 14)} Share report</button><button type="button" class="secondary" id="approve-inspection">${icon("shield-check", 14)} Approval</button></div>${inspectionApprovalHistory(existing) ? `<h3>Approval history</h3>${inspectionApprovalHistory(existing)}` : ""}` : ""}</div><div class="modal-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">${icon("save", 14)} Save inspection</button></div></form>`);
     document.querySelectorAll("[data-damage-zone]").forEach((button) => {
       button.onclick = () => {
@@ -1705,7 +1731,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
     return shell(`${heading("Administration", "Shop settings", "Core business defaults used throughout MechPro.", false)}<div class="settings-panel"><div class="form-grid"><label>Shop name<input value="Your Car Guy"/></label><label>Phone<input value="806-555-0100"/></label><label class="full">Address<input value="4821 34th Street, Lubbock, TX 79410"/></label><label>Default labor rate<input value="$165.00 / hr"/></label><label>Sales tax<input value="8.25%"/></label><label>Service bays<input value="4"/></label><label>SMS notifications<select><option>Enabled</option><option>Disabled</option></select></label></div><button class="primary settings-save">${icon("save", 15)} Save settings</button></div><div class="settings-panel"><div class="statement-head"><div><div class="eyebrow">Tax filing</div><h2>Subscribing state & filing details</h2></div>${icon("landmark", 18)}</div><form class="form-grid" id="tax-settings-form"><label>Filing state *<select name="state" required>${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${t.taxId}" placeholder="e.g. 1-234-5678-9"/></label><label>Default sales tax rate % *<input name="rate" type="number" step=".01" min="0" value="${t.rate}" required/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary" type="submit">${icon("save", 14)} Save tax settings</button></div></form></div>`);
   }
   function loginScreen() {
-    return `<main class="login-screen"><section class="login-panel"><div class="brand login-brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders${isDesktopApp ? " \xB7 Windows" : ""}</small></div></div><div class="eyebrow">Secure team access</div><h1>Sign in to your workspace</h1><p>${isDesktopApp ? "An internet connection and active subscription are required." : "Use the employee login created by your Administrator."}</p><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required placeholder="you@yourcarguy.com"/></label><label>Password<input name="password" type="password" autocomplete="current-password" required placeholder="Password"/></label><p class="login-error" id="login-error" ${desktopLoginMessage ? "" : "hidden"}>${escapeHtml(desktopLoginMessage || "Incorrect email or password.")}</p><button class="primary" type="submit">${icon("log-in", 15)} Sign in</button></form><button class="login-reset" type="button" onclick="openPasswordReset()">Forgot password?</button>${isDesktopApp ? "" : `<a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.exe" download>Download MechPro for Windows</a>`}<div class="login-help"><strong>${isDesktopApp ? "Online subscription verification" : "Cognito-backed account"}</strong><span>${isDesktopApp ? "Access is checked at sign-in and while the app is running." : "Contact your Administrator if you need access."}</span></div></section></main>`;
+    return `<main class="login-screen"><section class="login-panel"><div class="brand login-brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders${isDesktopApp2 ? " \xB7 Windows" : ""}</small></div></div><div class="eyebrow">Secure team access</div><h1>Sign in to your workspace</h1><p>${isDesktopApp2 ? "An internet connection and active subscription are required." : "Use the employee login created by your Administrator."}</p><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required placeholder="you@yourcarguy.com"/></label><label>Password<input name="password" type="password" autocomplete="current-password" required placeholder="Password"/></label><p class="login-error" id="login-error" ${desktopLoginMessage ? "" : "hidden"}>${escapeHtml(desktopLoginMessage || "Incorrect email or password.")}</p><button class="primary" type="submit">${icon("log-in", 15)} Sign in</button></form><button class="login-reset" type="button" onclick="openPasswordReset()">Forgot password?</button>${isDesktopApp2 ? "" : `<a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.exe" download>Download MechPro for Windows</a>`}<div class="login-help"><strong>${isDesktopApp2 ? "Online subscription verification" : "Cognito-backed account"}</strong><span>${isDesktopApp2 ? "Access is checked at sign-in and while the app is running." : "Contact your Administrator if you need access."}</span></div></section></main>`;
   }
   async function platformApi(path, options = {}) {
     const response = await authorizedApiRequest(path, options), body = await response.json().catch(() => ({}));
@@ -2663,9 +2689,6 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     document.querySelectorAll("[data-estimate-discount]").forEach((button) => button.onclick = () => openEstimateDiscount(button.dataset.estimateDiscount));
     document.querySelectorAll("[data-estimate-decline]").forEach((button) => button.onclick = () => decideEstimate(button.dataset.estimateDecline, "declined"));
   };
-  function shopProfile() {
-    return state.shopSettingsRecords.find((item) => item.id === "profile") || { id: "profile", shopName: "Your Car Guy", phone: "806-555-0100", address: "4821 34th Street, Lubbock, TX 79410", laborRate: 165, invoiceFooter: "Thank you for your business.", logoUrl: "", carfaxEnabled: false, plateProviderEnabled: false };
-  }
   settings = function() {
     const profile = shopProfile(), t = state.taxSettings, stateOptions = usStates.map((s) => `<option value="${s.code}" ${t.state === s.code ? "selected" : ""}>${s.name}</option>`).join("");
     return shell(`${heading("Administration", "Shop settings", "Branding, invoice defaults, tax, and optional provider readiness.", false)}<form class="settings-panel form-grid" id="shop-profile-form"><label>Shop name<input name="shopName" value="${escapeHtml(profile.shopName)}" required/></label><label>Phone<input name="phone" value="${escapeHtml(profile.phone)}"/></label><label class="full">Address<input name="address" value="${escapeHtml(profile.address)}"/></label><label>Logo URL<input name="logoUrl" type="url" value="${escapeHtml(profile.logoUrl)}"/></label><label>Default labor rate<input name="laborRate" type="number" step=".01" value="${Number(profile.laborRate)}"/></label><label class="full">Invoice footer<input name="invoiceFooter" value="${escapeHtml(profile.invoiceFooter)}"/></label><div class="full service-contract"><h2>Commercial integrations</h2><p>CarFax service history and license-plate recognition require provider contracts and server-side credentials. They remain unavailable until configured by the platform operator.</p></div><label class="toggle-field"><input type="checkbox" disabled ${profile.carfaxEnabled ? "checked" : ""}/><span>CarFax provider configured</span></label><label class="toggle-field"><input type="checkbox" disabled ${profile.plateProviderEnabled ? "checked" : ""}/><span>Plate recognition configured</span></label><div class="full"><button class="primary">${icon("save", 14)} Save business profile</button></div></form><div class="settings-panel"><form class="form-grid" id="tax-settings-form"><label>Filing state<select name="state">${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${escapeHtml(t.taxId)}"/></label><label>Sales tax rate %<input name="rate" type="number" step=".01" min="0" value="${t.rate}"/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary">Save tax settings</button></div></form></div>`);
@@ -2763,7 +2786,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     const vehicle = state.vehicles.find((v) => v.id === id);
     if (!vehicle) return;
     const history = linkedOrders(vehicle), photos = vehicle.photoKeys || [];
-    showModal(`<div class="modal wide" id="vehicle-detail"><div class="modal-head"><h2>${escapeHtml(vehicleLabel(vehicle))}</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="form-grid"><label>Owner<input value="${escapeHtml(vehicle.customer)}" disabled/></label><label>VIN<input value="${escapeHtml(vehicle.vin || "")}" disabled/></label><label>Plate<input value="${escapeHtml(vehicle.plate || "")}" disabled/></label><label>Mileage<input value="${vehicle.mileage || ""}" disabled/></label><label>Next service<input value="${vehicle.nextServiceDate || ""}" disabled/></label><label>Notes<input value="${escapeHtml(vehicle.notes || "")}" disabled/></label></div>${photos.length ? `<h3>Photos</h3><div class="vehicle-photo-thumbs">${photos.map((key) => `<img src="${cognitoConfig.apiUrl}/files/${encodeURIComponent(key)}" alt="Vehicle photo" class="vehicle-thumb"/>`).join("")}</div>` : ""}<h3>Service History (${history.length})</h3><table class="mini-table"><thead><tr><th>RO</th><th>Status</th><th>Vehicle</th><th>Total</th></tr></thead><tbody>${history.map((o) => `<tr><td class="mono">${o.id}</td><td>${badge(o.status)}</td><td>${escapeHtml(o.vehicle)}</td><td>${money(o.total)}</td></tr>`).join("") || `<tr><td colspan="4">No service history</td></tr>`}</tbody></table><div class="modal-actions"><button class="secondary" id="vd-edit">${icon("pencil", 14)} Edit vehicle</button></div></div></div>`);
+    showModal(`<div class="modal wide" id="vehicle-detail"><div class="modal-head"><h2>${escapeHtml(vehicleLabel(vehicle))}</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="form-grid"><label>Owner<input value="${escapeHtml(vehicle.customer)}" disabled/></label><label>VIN<input value="${escapeHtml(vehicle.vin || "")}" disabled/></label><label>Plate<input value="${escapeHtml(vehicle.plate || "")}" disabled/></label><label>Mileage<input value="${vehicle.mileage || ""}" disabled/></label><label>Next service<input value="${vehicle.nextServiceDate || ""}" disabled/></label><label>Notes<input value="${escapeHtml(vehicle.notes || "")}" disabled/></label></div>${photos.length ? `<h3>Photos</h3><div class="vehicle-photo-thumbs">${photos.map((key) => `<img src="${cognitoConfig2.apiUrl}/files/${encodeURIComponent(key)}" alt="Vehicle photo" class="vehicle-thumb"/>`).join("")}</div>` : ""}<h3>Service History (${history.length})</h3><table class="mini-table"><thead><tr><th>RO</th><th>Status</th><th>Vehicle</th><th>Total</th></tr></thead><tbody>${history.map((o) => `<tr><td class="mono">${o.id}</td><td>${badge(o.status)}</td><td>${escapeHtml(o.vehicle)}</td><td>${money(o.total)}</td></tr>`).join("") || `<tr><td colspan="4">No service history</td></tr>`}</tbody></table><div class="modal-actions"><button class="secondary" id="vd-edit">${icon("pencil", 14)} Edit vehicle</button></div></div></div>`);
     document.querySelector("#vd-edit")?.addEventListener("click", () => {
       closeModal();
       openVehicleForm(vehicle);
@@ -2823,10 +2846,10 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
       const data = Object.fromEntries(new FormData(form)), errorEl = form.querySelector("#login-error"), submitButton = form.querySelector("button[type=submit]");
       errorEl.hidden = true;
       submitButton.disabled = true;
-      desktopEntitlementVerified = !isDesktopApp;
+      desktopEntitlementVerified = !isDesktopApp2;
       try {
         const tokens = await cognitoSignIn(data.email.trim(), data.password);
-        if (isDesktopApp) {
+        if (isDesktopApp2) {
           const claims = decodeJwt(tokens.IdToken);
           sessionStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 }));
           await verifyDesktopEntitlement();
@@ -2847,8 +2870,8 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
         render();
       } catch (error) {
         clearAuthSession();
-        desktopEntitlementVerified = !isDesktopApp;
-        desktopLoginMessage = isDesktopApp && error.message?.includes("subscription") || error.message?.includes("internet") ? error.message : "";
+        desktopEntitlementVerified = !isDesktopApp2;
+        desktopLoginMessage = isDesktopApp2 && error.message?.includes("subscription") || error.message?.includes("internet") ? error.message : "";
         errorEl.textContent = desktopLoginMessage || (error.message?.startsWith("API request failed") ? "Your account was authenticated, but its shop profile could not be loaded. Please try again." : "Incorrect email or password.");
         errorEl.hidden = false;
         submitButton.disabled = false;
@@ -3067,7 +3090,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     win.document.close();
   };
   printInspectionReport = function(inspection) {
-    const profile = shopProfile(), brand = printableBrand(profile), counts = (inspection.items || []).reduce((total, item) => (total[item.status] = (total[item.status] || 0) + 1, total), {}), itemRows = (inspection.items || []).map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.status === "not_checked" ? "Not checked" : item.status || "")}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join(""), damage = (inspection.damageZones || []).map(escapeHtml).join(", "), approvalRows = (inspection.approvalHistory || []).map((entry) => `<tr><td>${escapeHtml(entry.status)}</td><td>${escapeHtml(entry.actorName || "")}</td><td>${escapeHtml(new Date(entry.timestamp).toLocaleString())}</td><td>${escapeHtml(entry.note || "")}</td></tr>`).join(""), photos = (inspection.photoKeys || []).map((key) => `<img src="${escapeHtml(`${cognitoConfig.apiUrl}/files/${encodeURIComponent(key)}`)}" alt="Inspection photo"/>`).join(""), win = window.open("", "_blank", "noopener");
+    const profile = shopProfile(), brand = printableBrand(profile), counts = (inspection.items || []).reduce((total, item) => (total[item.status] = (total[item.status] || 0) + 1, total), {}), itemRows = (inspection.items || []).map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.status === "not_checked" ? "Not checked" : item.status || "")}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join(""), damage = (inspection.damageZones || []).map(escapeHtml).join(", "), approvalRows = (inspection.approvalHistory || []).map((entry) => `<tr><td>${escapeHtml(entry.status)}</td><td>${escapeHtml(entry.actorName || "")}</td><td>${escapeHtml(new Date(entry.timestamp).toLocaleString())}</td><td>${escapeHtml(entry.note || "")}</td></tr>`).join(""), photos = (inspection.photoKeys || []).map((key) => `<img src="${escapeHtml(`${cognitoConfig2.apiUrl}/files/${encodeURIComponent(key)}`)}" alt="Inspection photo"/>`).join(""), win = window.open("", "_blank", "noopener");
     if (!win) {
       toast("Allow pop-ups to print the inspection");
       return;
@@ -3414,11 +3437,11 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
       throw error;
     }
   };
-  if ("serviceWorker" in navigator && isSecureContext && !isDesktopApp) {
+  if ("serviceWorker" in navigator && isSecureContext && !isDesktopApp2) {
     window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch((error) => console.error("Service worker registration failed", error)));
   }
   async function startApp() {
-    if (isDesktopApp && authSession()) {
+    if (isDesktopApp2 && authSession()) {
       try {
         await verifyDesktopEntitlement();
       } catch (error) {
@@ -3428,7 +3451,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     }
     render();
   }
-  if (isDesktopApp) setInterval(async () => {
+  if (isDesktopApp2) setInterval(async () => {
     if (!authSession()) return;
     try {
       await verifyDesktopEntitlement();
@@ -3438,6 +3461,9 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
       clearAuthSession();
       render();
     }
-  }, DESKTOP_ENTITLEMENT_INTERVAL);
+  }, DESKTOP_ENTITLEMENT_INTERVAL2);
   void startApp();
+
+  // src/main.js
+  window.__MECHPRO_CONFIG__ = { cognito: cognitoConfig, storage: storageKeys };
 })();

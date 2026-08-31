@@ -1,16 +1,15 @@
 /**
- * Register new feature modules here.
+ * Register feature modules here before the legacy SPA loads.
  *
- * Example:
- *   import './dispatch/board.js';
- *   import './shop/inventory.js';
- *
- * Modules should export init() functions when they add routes or bindings,
- * or side-effect imports when they extend shared registries.
+ * Platform modules wire the three repo surfaces together:
+ *   - src/ (web PWA bundle)
+ *   - desktop/ (Electron shell via window.mechproDesktop)
+ *   - infra/ (API + Cognito; see src/shared/config.js)
  */
+import './platform/index.js';
 
 export function registerModules() {
-  // Reserved for future modular feature registration.
+  // Future domain modules (dispatch, shop ops, AI, etc.) register here.
 }
 
 registerModules();
