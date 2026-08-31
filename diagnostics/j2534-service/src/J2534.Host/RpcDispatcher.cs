@@ -11,7 +11,7 @@ public static class RpcDispatcher
         {
             var result = request.Method switch
             {
-                "ping" => new { ok = true, simulator = false },
+                "ping" => new { ok = true, simulator = session.IsSimulator },
                 "listAdapters" => AdapterRegistry.ListAdapters(),
                 "connect" => session.Connect(ParseConnect(request.Params)),
                 "disconnect" => session.Disconnect(),
@@ -30,7 +30,7 @@ public static class RpcDispatcher
         }
         catch (Exception ex)
         {
-            return JsonRpcResponse.Error(request.Id, -32000, ex.Message);
+            return JsonRpcResponse.Fail(request.Id, -32000, ex.Message);
         }
     }
 

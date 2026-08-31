@@ -22,3 +22,10 @@ python3 -m http.server 3000 --bind 127.0.0.1   # then open http://127.0.0.1:3000
 ```
 
 Editing `app.js`/`styles.css` only requires a browser refresh (no bundler/HMR). The service worker caches aggressively; hard-reload or clear the `mechpro-dispatch-v1` service-worker cache if edits don't appear.
+
+### OEM Diagnostics (J2534 / Windows)
+
+- **J2534 native host** lives in `diagnostics/j2534-service/`. Build with .NET 8: `./diagnostics/j2534-service/scripts/publish-win-x64.sh` (or `publish-win-x64.ps1` on Windows). Output: `diagnostics/j2534-service/publish/win-x64/J2534.Host.exe`.
+- **Windows installer** bundles that exe via `npm run build:windows` (runs J2534 publish then `electron-builder`). Requires Windows for the final NSIS installer; CI workflow `.github/workflows/windows-desktop.yml` builds on `windows-latest`.
+- On Windows with a registered J2534 adapter, Electron prefers `J2534.Host.exe` over the Node simulator (`desktop/diagnostics-bridge.js`).
+- **AWS diagnostics API** (`/diagnostics/coverage`, `/diagnostics/audit`, `/diagnostics/authorize`) deploys with `cdk deploy` from `infra/` when merged to `main`.

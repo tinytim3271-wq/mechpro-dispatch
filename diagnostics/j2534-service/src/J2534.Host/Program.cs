@@ -52,7 +52,7 @@ public static class Program
                 var request = JsonSerializer.Deserialize<JsonRpcRequest>(line);
                 if (request is null)
                 {
-                    response = JsonRpcResponse.Error(null, -32700, "Parse error");
+                    response = JsonRpcResponse.Fail(null, -32700, "Parse error");
                 }
                 else
                 {
@@ -61,7 +61,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                response = JsonRpcResponse.Error(null, -32000, ex.Message);
+                response = JsonRpcResponse.Fail(null, -32000, ex.Message);
             }
 
             await writer.WriteLineAsync(JsonSerializer.Serialize(response));

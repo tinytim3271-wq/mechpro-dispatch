@@ -7,7 +7,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "desktop": "electron .",
-    "build:windows": "electron-builder --win nsis",
+    "build:j2534": "bash diagnostics/j2534-service/scripts/publish-win-x64.sh",
+    "build:windows": "npm run build:j2534 && electron-builder --win nsis",
     "test:j2534": "node diagnostics/j2534-host-node/test/host.test.js"
   },
   "devDependencies": {
@@ -40,6 +41,11 @@
         "from": "diagnostics/j2534-host-node",
         "to": "j2534-host-node",
         "filter": ["**/*"]
+      },
+      {
+        "from": "diagnostics/j2534-service/publish/win-x64",
+        "to": "j2534-host",
+        "filter": ["J2534.Host.exe"]
       }
     ],
     "win": {

@@ -2,21 +2,20 @@ using System.Text;
 
 namespace MechPro.J2534.IsoTp;
 
-/// <summary>ISO 15765-4 (ISO-TP) single-frame and multi-frame handling.</summary>
-public sealed class IsoTpChannel
+/// <summary>Bench simulator for development without a J2534 adapter.</summary>
+public sealed class SimulatedIsoTpChannel : IIsoTpChannel
 {
     readonly Action<string, string, string, string> _log;
 
-    public IsoTpChannel(Action<string, string, string, string> log) => _log = log;
+    public SimulatedIsoTpChannel(Action<string, string, string, string> log) => _log = log;
 
     public byte[] SendRequest(byte[] request, string txId, string rxId)
     {
         var txHex = Convert.ToHexString(request);
-        _log("tx", txId, txHex, "ISO-TP request");
+        _log("tx", txId, txHex, "ISO-TP request (simulator)");
 
-        // Single-frame response simulation for development without hardware
         var response = BuildSimulatedResponse(request);
-        _log("rx", rxId, Convert.ToHexString(response), "ISO-TP response");
+        _log("rx", rxId, Convert.ToHexString(response), "ISO-TP response (simulator)");
         return response;
     }
 

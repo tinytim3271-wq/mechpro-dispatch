@@ -19,6 +19,10 @@ function hostScriptPath() {
 }
 
 function csharpHostPath() {
+  const fs = require('node:fs');
+  const { app } = require('electron');
+  const packaged = path.join(process.resourcesPath, 'j2534-host', 'J2534.Host.exe');
+  if (app?.isPackaged && fs.existsSync(packaged)) return packaged;
   return path.join(__dirname, '..', 'diagnostics', 'j2534-service', 'publish', 'win-x64', 'J2534.Host.exe');
 }
 

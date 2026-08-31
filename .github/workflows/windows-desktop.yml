@@ -1,0 +1,51 @@
+name: Windows desktop release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'diagnostics/j2534-service/**'
+      - 'desktop/**'
+      - 'package.json'
+      - 'app.js'
+      - 'diagnostics-ui.js'
+
+permissions:
+  contents: read
+
+jobs:
+  build-j2534:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish J2534.Host.exe
+        shell: pwsh
+        run: ./diagnostics/j2534-service/scripts/publish-win-x64.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: j2534-host-win-x64
+          path: diagnostics/j2534-service/publish/win-x64/J2534.Host.exe
+
+  build-installer:
+    needs: build-j2534
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: j2534-host-win-x64
+          path: diagnostics/j2534-service/publish/win-x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mechpro-windows-installer
+          path: dist/windows/*.exe

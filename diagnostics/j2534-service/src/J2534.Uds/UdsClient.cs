@@ -12,9 +12,9 @@ public sealed class EcuIdentification
 /// <summary>UDS diagnostic services for vehicle identification and DTC operations.</summary>
 public sealed class UdsClient
 {
-    readonly IsoTpChannel _channel;
+    readonly IIsoTpChannel _channel;
 
-    public UdsClient(IsoTpChannel channel) => _channel = channel;
+    public UdsClient(IIsoTpChannel channel) => _channel = channel;
 
     public Task<string> ReadVinAsync(string txId, string rxId)
     {
@@ -24,7 +24,13 @@ public sealed class UdsClient
         return Task.FromResult(System.Text.Encoding.ASCII.GetString(vinBytes).Trim('\0', ' '));
     }
 
-    public async Task<EcuIdentification> ReadEcuIdentificationAsync(string txId, string rxId)
+    public Task SendTesterPresent(string txId, string rxId)
+    {
+        _channel.SendRequest([0x3E, 0x00], txId, rxId);
+        return Task.CompletedTask;
+    }
+
+    public Task<EcuIdentification> ReadEcuIdentificationAsync(string txId, string rxId)
     {
         var part = ReadDataById([0x22, 0xF1, 0x8A], txId, rxId);
         var sw = ReadDataById([0x22, 0xF1, 0x89], txId, rxId);
@@ -41,7 +47,7 @@ public sealed class UdsClient
     {
         var response = _channel.SendRequest([0x19, 0x02, 0xFF], txId, rxId);
         ValidatePositive(response, 0x59);
-        return Task.FromResult(Array.Empty<object>());
+        return Task.FromResult(ParseDtcs(response));
     }
 
     public Task ClearDtcsAsync(string txId, string rxId)
@@ -57,6 +63,31 @@ public sealed class UdsClient
         ValidatePositive(response, 0x62);
         return System.Text.Encoding.ASCII.GetString(response.AsSpan(3)).Trim('\0', ' ');
     }
+
+    static object[] ParseDtcs(byte[] response)
+    {
+        if (response.Length <= 3) return [];
+        var dtcs = new List<object>();
+        for (var i = 3; i + 3 < response.Length; i += 4)
+        {
+            var a = response[i];
+            var b = response[i + 1];
+            var c = response[i + 2];
+            var status = response[i + 3];
+            var prefix = ((a & 0xC0) >> 6) switch { 0 => "P", 1 => "C", 2 => "B", _ => "U" };
+            var code = $"{prefix}{((a & 0x3F) << 8) | b:X4}";
+            dtcs.Add(new { code, status = StatusLabel(status), description = $"DTC {code}" });
+        }
+        return dtcs.ToArray();
+    }
+
+    static string StatusLabel(byte status) => status switch
+    {
+        0x08 => "pending",
+        0x09 => "pending",
+        0x0A => "permanent",
+        _ => "stored",
+    };
 
     static void ValidatePositive(byte[] response, byte expectedSid)
     {
