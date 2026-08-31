@@ -1,0 +1,113 @@
+{
+  "coverageVersion": "2026.08.31.1",
+  "records": [
+    {
+      "id": "ram-1500-dt-2019-2024",
+      "make": "Ram",
+      "model": "1500",
+      "yearRange": [2019, 2024],
+      "platform": "DT",
+      "ignitionType": "push_button",
+      "rfHubGen": "Gen3",
+      "bcmGen": "BCM_DT",
+      "gatewayArch": "SGW_DT",
+      "region": "NA",
+      "procedures": {
+        "add_key": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "all_keys_lost": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "program_remote": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "erase_keys": { "supported": false, "authorizationRequired": null }
+      },
+      "preconditions": [
+        "Regulated 12V+ power supply connected",
+        "At least one authorized key present for add-key procedure",
+        "Ignition in RUN position",
+        "VIN confirmed against work order"
+      ],
+      "warnings": [
+        "All-keys-lost procedures require ownership attestation and AutoAuth authorization.",
+        "Do not disconnect the J2534 adapter during any security-related session."
+      ],
+      "supported": "requires_authorization"
+    },
+    {
+      "id": "dodge-charger-ld-2015-2023",
+      "make": "Dodge",
+      "model": "Charger",
+      "yearRange": [2015, 2023],
+      "platform": "LD",
+      "ignitionType": "push_button",
+      "rfHubGen": "Gen2",
+      "bcmGen": "BCM_LD",
+      "gatewayArch": "SGW_LD",
+      "region": "NA",
+      "procedures": {
+        "add_key": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "all_keys_lost": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "program_remote": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "erase_keys": { "supported": false, "authorizationRequired": null }
+      },
+      "preconditions": [
+        "Regulated 12V+ power supply connected",
+        "At least one authorized key present for add-key procedure",
+        "Ignition in RUN position"
+      ],
+      "warnings": [
+        "LD platform uses encrypted gateway — dealer or AutoAuth credentials required."
+      ],
+      "supported": "requires_authorization"
+    },
+    {
+      "id": "ram-2500-dj-2019-2024",
+      "make": "Ram",
+      "model": "2500/3500",
+      "yearRange": [2019, 2024],
+      "platform": "DJ",
+      "ignitionType": "push_button",
+      "rfHubGen": "Gen3",
+      "bcmGen": "BCM_DJ",
+      "gatewayArch": "SGW_DJ",
+      "region": "NA",
+      "procedures": {
+        "add_key": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "all_keys_lost": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "program_remote": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "erase_keys": { "supported": false, "authorizationRequired": null }
+      },
+      "preconditions": [
+        "Regulated 12V+ power supply connected",
+        "Heavy-duty electrical system — verify stable voltage before programming"
+      ],
+      "warnings": [
+        "DJ platform programming requires AutoAuth authorization."
+      ],
+      "supported": "requires_authorization"
+    },
+    {
+      "id": "dodge-journey-jc-2011-2020",
+      "make": "Dodge",
+      "model": "Journey",
+      "yearRange": [2011, 2020],
+      "platform": "JC",
+      "ignitionType": "mechanical",
+      "rfHubGen": "Gen1",
+      "bcmGen": "BCM_JC",
+      "gatewayArch": "SGW_JC",
+      "region": "NA",
+      "procedures": {
+        "add_key": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "all_keys_lost": { "supported": false, "authorizationRequired": null },
+        "program_remote": { "supported": true, "authorizationRequired": "autoauth_stellantis" },
+        "erase_keys": { "supported": false, "authorizationRequired": null }
+      },
+      "preconditions": [
+        "Mechanical ignition — key must be in RUN",
+        "At least one working key required"
+      ],
+      "warnings": [
+        "All-keys-lost not supported on this platform through authorized channels."
+      ],
+      "supported": "partial"
+    }
+  ]
+}
