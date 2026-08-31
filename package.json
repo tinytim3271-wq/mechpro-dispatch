@@ -12,6 +12,7 @@
     "validate:infra": "bash -lc 'cd infra && npm test -- --runInBand && npm run build'",
     "validate": "npm run build:web && npm run validate:infra",
     "compare-folder": "node scripts/compare-folders.mjs",
+    "compare-zips": "node scripts/compare-zips.mjs",
     "desktop": "electron .",
     "build:windows": "npm run build:web && electron-builder --win nsis"
   },
