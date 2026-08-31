@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "pipeName": "\\\\.\\pipe\\mechpro-j2534",
+  "methods": {
+    "listAdapters": { "params": {}, "result": { "adapters": "AdapterInfo[]", "simulator": "boolean" } },
+    "connect": { "params": { "adapterId": "string", "protocol": "string", "baudRate": "number?" }, "result": { "connected": "boolean", "protocol": "string", "voltage": "number" } },
+    "disconnect": { "params": {}, "result": { "connected": "boolean" } },
+    "getConnectionStatus": { "params": {}, "result": { "connected": "boolean", "adapterId": "string?", "protocol": "string?", "voltage": "number?", "commFault": "boolean" } },
+    "readVin": { "params": {}, "result": { "vin": "string", "source": "string", "raw": "string" } },
+    "identifyEcus": { "params": {}, "result": { "ecus": "EcuInfo[]", "securityModules": "SecurityModule[]", "networkTopology": "string[]" } },
+    "readDtcs": { "params": {}, "result": { "dtcs": "DtcInfo[]" } },
+    "clearDtcs": { "params": {}, "result": { "cleared": "boolean" } },
+    "startLiveLog": { "params": {}, "result": { "active": "boolean" } },
+    "stopLiveLog": { "params": {}, "result": { "active": "boolean" } },
+    "pollLiveLog": { "params": { "since": "number?" }, "result": { "entries": "CommLogEntry[]" } },
+    "identifyVehicle": { "params": {}, "result": "VehicleIdentification" }
+  },
+  "types": {
+    "AdapterInfo": {
+      "id": "string",
+      "name": "string",
+      "vendor": "string",
+      "dllPath": "string",
+      "protocols": "string[]",
+      "firmware": "string"
+    },
+    "EcuInfo": {
+      "logicalAddress": "string",
+      "name": "string",
+      "partNumber": "string",
+      "softwareVersion": "string",
+      "calibrationId": "string"
+    },
+    "SecurityModule": {
+      "type": "rf_hub | win | immobilizer | gateway",
+      "logicalAddress": "string",
+      "partNumber": "string",
+      "generation": "string"
+    },
+    "DtcInfo": {
+      "code": "string",
+      "status": "string",
+      "description": "string"
+    },
+    "CommLogEntry": {
+      "timestamp": "number",
+      "direction": "tx | rx",
+      "address": "string",
+      "data": "string",
+      "description": "string"
+    },
+    "VehicleIdentification": {
+      "sessionId": "string",
+      "vin": "string",
+      "make": "string",
+      "modelYear": "number",
+      "platform": "string",
+      "ignitionType": "push_button | mechanical",
+      "ecus": "EcuInfo[]",
+      "securityModules": "SecurityModule[]",
+      "networkTopology": "string[]",
+      "identifiedAt": "string",
+      "adapterInfo": { "vendor": "string", "dll": "string", "firmware": "string" }
+    }
+  }
+}

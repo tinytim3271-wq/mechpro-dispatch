@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>MechPro.J2534.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\J2534.Native\J2534.Native.csproj" />
+    <ProjectReference Include="..\J2534.IsoTp\J2534.IsoTp.csproj" />
+    <ProjectReference Include="..\J2534.Uds\J2534.Uds.csproj" />
+  </ItemGroup>
+</Project>
