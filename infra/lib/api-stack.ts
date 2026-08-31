@@ -55,6 +55,9 @@ export class ApiStack extends Stack {
     });
     const checkoutFn = nodeFn('CheckoutFn', 'payments/checkout.ts');
     const entitlementFn = nodeFn('SubscriptionEntitlementFn', 'subscription/entitlement.ts');
+    const diagnosticsCoverageFn = nodeFn('DiagnosticsCoverageFn', 'diagnostics/coverage.ts');
+    const diagnosticsAuditFn = nodeFn('DiagnosticsAuditFn', 'diagnostics/audit.ts');
+    const diagnosticsAuthFn = nodeFn('DiagnosticsAuthFn', 'diagnostics/auth-proxy.ts');
     const webhookFn = nodeFn('StripeWebhookFn', 'payments/webhook.ts');
     const assistantFn = nodeFn('AssistantFn', 'ai/assistant.ts');
     assistantFn.addEnvironment('BEDROCK_MODEL_ID', 'us.amazon.nova-lite-v1:0');
@@ -92,7 +95,7 @@ export class ApiStack extends Stack {
       }));
     }
 
-    for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn]) {
+    for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn, diagnosticsAuditFn]) {
       props.table.grantReadWriteData(fn);
     }
     props.table.grantReadData(assistantFn);
@@ -185,6 +188,10 @@ export class ApiStack extends Stack {
     authorizedRoute('/entities/{type}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], entitiesFn);
     authorizedRoute('/entities/{type}/{id}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PUT, apigwv2.HttpMethod.DELETE], entitiesFn);
     authorizedRoute('/vehicles/decode/{vin}', [apigwv2.HttpMethod.GET], vehicleDecodeFn);
+    authorizedRoute('/diagnostics/coverage', [apigwv2.HttpMethod.GET], diagnosticsCoverageFn);
+    authorizedRoute('/diagnostics/coverage/bundle', [apigwv2.HttpMethod.GET], diagnosticsCoverageFn);
+    authorizedRoute('/diagnostics/audit', [apigwv2.HttpMethod.POST], diagnosticsAuditFn);
+    authorizedRoute('/diagnostics/authorize', [apigwv2.HttpMethod.POST], diagnosticsAuthFn);
     authorizedRoute('/admin/accounts', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], adminAccountsFn);
     authorizedRoute('/admin/accounts/{username}/reset-password', [apigwv2.HttpMethod.POST], adminAccountsFn);
     authorizedRoute('/admin/accounts/{username}/set-password', [apigwv2.HttpMethod.POST], adminAccountsFn);
@@ -224,6 +231,9 @@ export class ApiStack extends Stack {
       adminAccountsFn,
       checkoutFn,
       entitlementFn,
+      diagnosticsCoverageFn,
+      diagnosticsAuditFn,
+      diagnosticsAuthFn,
       webhookFn,
       assistantFn,
       agentPhoneWebhookFn,
