@@ -84,26 +84,21 @@ function dispatch(method, params) {
 
 function listAdapters() {
   const adapters = [];
+  const seenDlls = new Set();
   if (process.platform === 'win32') {
-    try {
-      const { execSync } = require('node:child_process');
-      const output = execSync(
-        'reg query "HKLM\\SOFTWARE\\PassThruSupport.04.04" /s 2>nul',
-        { encoding: 'utf8', timeout: 5000 },
-      );
-      const names = [...output.matchAll(/PassThruSupport\.04\.04\\([^\r\n\\]+)/g)].map((m) => m[1]);
-      names.forEach((name, index) => {
-        adapters.push({
-          id: `registry-${index}`,
-          name,
-          vendor: name.split(/\s+/)[0] || name,
-          dllPath: '(registered J2534 device)',
-          protocols: ['CAN', 'ISO15765', 'ISO15765_FD'],
-          firmware: 'unknown',
-        });
-      });
-    } catch {
-      // Registry unavailable or no devices
+    const roots = [
+      'HKLM\\SOFTWARE\\PassThruSupport.04.04',
+      'HKLM\\SOFTWARE\\WOW6432Node\\PassThruSupport.04.04',
+      'HKLM\\SOFTWARE\\PassThruSupport.04.02',
+      'HKLM\\SOFTWARE\\WOW6432Node\\PassThruSupport.04.02',
+    ];
+    for (const root of roots) {
+      for (const entry of readWindowsRegistryAdapters(root)) {
+        const key = entry.dllPath.toLowerCase();
+        if (seenDlls.has(key)) continue;
+        seenDlls.add(key);
+        adapters.push(entry);
+      }
     }
   }
   adapters.push({
@@ -114,7 +109,54 @@ function listAdapters() {
     protocols: ['CAN', 'ISO15765'],
     firmware: '1.0.0-sim',
   });
-  return { adapters, simulator: true };
+  return { adapters, simulator: adapters.length === 1 };
+}
+
+function readWindowsRegistryAdapters(root) {
+  try {
+    const { execSync } = require('node:child_process');
+    const output = execSync(`reg query "${root}" /s 2>nul`, { encoding: 'utf8', timeout: 5000 });
+    const entries = [];
+    let currentKey = null;
+    let currentValues = {};
+    for (const line of output.split(/\r?\n/)) {
+      const keyMatch = line.match(/^HKEY_LOCAL_MACHINE\\(.+)$/i);
+      if (keyMatch) {
+        if (currentKey) entries.push({ key: currentKey, values: currentValues });
+        currentKey = keyMatch[1];
+        currentValues = {};
+        continue;
+      }
+      const valueMatch = line.trim().match(/^(\S+)\s+REG_\S+\s+(.+)$/);
+      if (valueMatch && currentKey) currentValues[valueMatch[1]] = valueMatch[2].trim();
+    }
+    if (currentKey) entries.push({ key: currentKey, values: currentValues });
+
+    const prefix = root.replace(/^HKLM\\/i, 'HKEY_LOCAL_MACHINE\\');
+    return entries
+      .filter((entry) => entry.key.startsWith(`${prefix}\\`) && entry.key !== prefix)
+      .map((entry) => {
+        const subKey = entry.key.slice(prefix.length + 1);
+        const dllPath = entry.values.FunctionLibrary;
+        if (!dllPath) return null;
+        const name = entry.values.Name || subKey;
+        const vendor = entry.values.Vendor || name.split(/\s+/)[0] || name;
+        const scope = root.includes('WOW6432Node') ? 'wow64' : 'native';
+        const version = root.includes('04.02') ? '0402' : '0404';
+        const slug = subKey.replace(/\s+/g, '-').toLowerCase();
+        return {
+          id: `registry-${scope}-${version}-${slug}`,
+          name,
+          vendor,
+          dllPath,
+          protocols: ['CAN', 'ISO15765', 'ISO15765_FD'],
+          firmware: 'unknown',
+        };
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 function connect(params) {

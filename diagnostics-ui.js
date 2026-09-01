@@ -130,7 +130,11 @@ function oemDiagnosticsView() {
       </section>`);
   }
 
+  const hardwareAdapters = (diag.adapters || []).filter((a) => a.id !== 'simulator');
   const adapters = (diag.adapters || []).map((a) => `<option value="${escapeHtml(a.id)}" ${diag.selectedAdapter === a.id ? 'selected' : ''}>${escapeHtml(a.name)} (${escapeHtml(a.vendor)})</option>`).join('');
+  const adapterHelp = hardwareAdapters.length
+    ? ''
+    : `<div class="ledger-note">${icon('info', 15)} No J2534 hardware detected. Install your adapter vendor software (for TOPDON RLink X7: RLink Platform → Drivers → download the J2534 driver), plug in USB, then click Refresh. MechPro scans both 64-bit and 32-bit Windows J2534 registry entries.</div>`;
 
   return shell(`${heading('Stellantis OEM', 'Dodge / Ram diagnostics', 'Phase 1: J2534 identification, DTC read/clear, and coverage eligibility. Key programming is not enabled in this release.', false)}
     <section class="oem-phase-notice">${icon('shield-alert', 16)}<span><strong>Diagnostic-only mode.</strong> This module reads vehicle identification and reports procedure eligibility. It does not program keys or remotes. Authorized programming requires AutoAuth credentials (Phase 3).</span></section>
@@ -150,6 +154,7 @@ function oemDiagnosticsView() {
           <h3>${icon('usb', 16)} J2534 adapter</h3>
           <div class="messaging-status ${status.connected ? 'ready' : 'idle'}">${icon(status.connected ? 'circle-check' : 'plug-zap', 17)}<div><strong>${status.connected ? 'Connected' : 'Not connected'}</strong><span>${status.connected ? `${escapeHtml(status.protocol || '')} · ${status.voltage ?? '—'} V` : 'Select adapter and connect'}</span></div></div>
           <label>Adapter<select id="oem-adapter-select">${adapters || '<option value="simulator">MechPro CAN Simulator</option>'}</select></label>
+          ${adapterHelp}
           <div class="ops-actions">
             <button class="primary" id="oem-refresh-adapters">${icon('refresh-cw', 14)} Refresh</button>
             <button class="primary" id="oem-connect" ${status.connected ? 'disabled' : ''}>${icon('plug-zap', 14)} Connect</button>
