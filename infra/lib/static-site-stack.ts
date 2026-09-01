@@ -11,10 +11,12 @@ import * as path from 'path';
  * verified for CloudFront and the CDN stack can deploy.
  */
 export class StaticSiteStack extends Stack {
+  readonly siteBucket: s3.Bucket;
+
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const siteBucket = new s3.Bucket(this, 'MechProSiteBucket', {
+    this.siteBucket = new s3.Bucket(this, 'MechProSiteBucket', {
       blockPublicAccess: new s3.BlockPublicAccess({
         blockPublicAcls: true,
         ignorePublicAcls: true,
@@ -33,6 +35,7 @@ export class StaticSiteStack extends Stack {
           'infra/**',
           'desktop/**',
           'dist/**',
+          'downloads/**',
           'node_modules/**',
           'package.json',
           'package-lock.json',
@@ -43,9 +46,12 @@ export class StaticSiteStack extends Stack {
           '.gitignore',
         ],
       })],
-      destinationBucket: siteBucket,
+      destinationBucket: this.siteBucket,
+      // Windows installer is published separately by CI into downloads/.
+      exclude: ['downloads/*'],
     });
 
-    new CfnOutput(this, 'SiteUrl', { value: siteBucket.bucketWebsiteUrl });
+    new CfnOutput(this, 'SiteUrl', { value: this.siteBucket.bucketWebsiteUrl });
+    new CfnOutput(this, 'SiteBucketName', { value: this.siteBucket.bucketName });
   }
 }

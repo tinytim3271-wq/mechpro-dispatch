@@ -60,3 +60,50 @@ jobs:
           path: |
             dist/windows/*.exe
             dist/windows/*.zip
+
+  publish-download:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-installer
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mechpro-windows-installer
+          path: dist/windows
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Publish Windows installer to site bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolve_output() {
+            aws cloudformation describe-stacks \
+              --stack-name "$1" \
+              --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue | [0]" \
+              --output text 2>/dev/null || true
+          }
+          BUCKET="$(resolve_output MechProCdnStack SiteBucketName)"
+          if [[ -z "$BUCKET" || "$BUCKET" == "None" ]]; then
+            BUCKET="$(resolve_output MechProStaticSiteStack SiteBucketName)"
+          fi
+          if [[ -z "$BUCKET" || "$BUCKET" == "None" ]]; then
+            echo "Could not resolve site bucket from CloudFormation outputs." >&2
+            exit 1
+          fi
+          echo "Publishing to s3://$BUCKET/downloads/"
+          aws s3 cp dist/windows/MechPro-Setup-1.0.0.exe "s3://$BUCKET/downloads/MechPro-Setup-1.0.0.exe" \
+            --content-type application/octet-stream \
+            --cache-control "public, max-age=300"
+          aws s3 cp dist/windows/MechPro-Setup-1.0.0.zip "s3://$BUCKET/downloads/MechPro-Setup-1.0.0.zip" \
+            --content-type application/zip \
+            --cache-control "public, max-age=300"
+          DIST_ID="$(resolve_output MechProCdnStack DistributionId)"
+          if [[ -n "$DIST_ID" && "$DIST_ID" != "None" ]]; then
+            aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/downloads/*"
+          fi
