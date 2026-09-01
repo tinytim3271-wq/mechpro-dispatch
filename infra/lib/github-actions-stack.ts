@@ -21,12 +21,13 @@ export class GitHubActionsStack extends Stack {
       url: 'https://token.actions.githubusercontent.com',
       clientIds: ['sts.amazonaws.com'],
     });
+    const subjectPattern = props.subject ?? `repo:${props.repository}:*`;
     const principal = new iam.OpenIdConnectPrincipal(provider).withConditions({
       StringEquals: {
         'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
       },
       StringLike: {
-        'token.actions.githubusercontent.com:sub': props.subject ?? `repo:${props.repository}:environment:production`,
+        'token.actions.githubusercontent.com:sub': subjectPattern,
       },
     });
     const role = new iam.Role(this, 'DeployRole', {

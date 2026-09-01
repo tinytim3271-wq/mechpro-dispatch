@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build-j2534:
@@ -132,20 +133,22 @@ jobs:
               --query "StackResources[?ResourceType=='AWS::S3::Bucket'].PhysicalResourceId | [0]" \
               --output text 2>/dev/null || true
           }
-          BUCKET=""
-          for attempt in $(seq 1 10); do
-            BUCKET="$(stack_bucket MechProCdnStack)"
-            if [[ -z "$BUCKET" || "$BUCKET" == "None" ]]; then
-              BUCKET="$(stack_bucket MechProStaticSiteStack)"
-            fi
-            if [[ -n "$BUCKET" && "$BUCKET" != "None" ]]; then
-              break
-            fi
-            if [[ "$attempt" -lt 10 ]]; then
-              echo "Could not resolve site bucket (attempt ${attempt}/10); waiting for deploy stack outputs..."
-              sleep 30
-            fi
-          done
+          BUCKET="${{ vars.SITE_BUCKET_NAME }}"
+          if [[ -z "$BUCKET" ]]; then
+            for attempt in $(seq 1 10); do
+              BUCKET="$(stack_bucket MechProCdnStack)"
+              if [[ -z "$BUCKET" || "$BUCKET" == "None" ]]; then
+                BUCKET="$(stack_bucket MechProStaticSiteStack)"
+              fi
+              if [[ -n "$BUCKET" && "$BUCKET" != "None" ]]; then
+                break
+              fi
+              if [[ "$attempt" -lt 10 ]]; then
+                echo "Could not resolve site bucket (attempt ${attempt}/10); waiting for deploy stack outputs..."
+                sleep 30
+              fi
+            done
+          fi
           if [[ -z "$BUCKET" || "$BUCKET" == "None" ]]; then
             echo "Could not resolve site bucket from CloudFormation stacks." >&2
             exit 1
