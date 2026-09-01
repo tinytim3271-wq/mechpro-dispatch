@@ -1,5 +1,6 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('node:path');
+const diagnostics = require('./diagnostics-bridge');
 
 const trustedOrigins = new Set([
   'https://www.yourcarguy806.com',
@@ -16,6 +17,31 @@ function isTrustedUrl(rawUrl) {
   }
 }
 
+function registerDiagnosticsIpc() {
+  const handlers = {
+    'diagnostics:listAdapters': () => diagnostics.listAdapters(),
+    'diagnostics:connect': (_e, params) => diagnostics.connect(params),
+    'diagnostics:disconnect': () => diagnostics.disconnect(),
+    'diagnostics:getConnectionStatus': () => diagnostics.getConnectionStatus(),
+    'diagnostics:readVin': () => diagnostics.readVin(),
+    'diagnostics:identifyEcus': () => diagnostics.identifyEcus(),
+    'diagnostics:readDtcs': () => diagnostics.readDtcs(),
+    'diagnostics:clearDtcs': () => diagnostics.clearDtcs(),
+    'diagnostics:startLiveLog': () => diagnostics.startLiveLog(),
+    'diagnostics:stopLiveLog': () => diagnostics.stopLiveLog(),
+    'diagnostics:pollLiveLog': (_e, since) => diagnostics.pollLiveLog(since),
+    'diagnostics:identifyVehicle': () => diagnostics.identifyVehicle(),
+  };
+  Object.entries(handlers).forEach(([channel, handler]) => {
+    ipcMain.handle(channel, async (event, ...args) => {
+      try {
+        return { ok: true, result: await handler(event, ...args) };
+      } catch (error) {
+        return { ok: false, error: error.message || 'Diagnostic operation failed' };
+      }
+    });
+  });
+}
 function createWindow() {
   const smokeTest = process.argv.includes('--smoke-test');
   const window = new BrowserWindow({
@@ -46,10 +72,12 @@ function createWindow() {
       try {
         const result = await window.webContents.executeJavaScript(`({
           desktop: Boolean(window.mechproDesktop),
+          diagnostics: Boolean(window.mechproDiagnostics),
           title: document.title,
           loginText: document.querySelector('.login-panel')?.innerText || ''
         })`);
         const passed = result.desktop
+          && result.diagnostics
           && result.title.includes('MechPro')
           && result.loginText.includes('active subscription');
         console.log(JSON.stringify({ smokeTest: passed ? 'passed' : 'failed', ...result }));
@@ -65,10 +93,17 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  registerDiagnosticsIpc();
+  if (process.platform === 'win32' || process.env.MECHPRO_START_J2534 === '1') {
+    diagnostics.ensureHost().catch((error) => {
+      console.error('[j2534] failed to start host:', error.message);
+    });
+  }
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
+app.on('before-quit', () => diagnostics.stopHost());
 app.on('window-all-closed', () => app.quit());

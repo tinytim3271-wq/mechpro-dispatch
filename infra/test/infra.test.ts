@@ -7,6 +7,12 @@ import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout
 import { verifyStripeSignature } from '../lambda/payments/webhook';
 import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
 import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
+import { verifyStripeSignature } from '../lambda/payments/webhook';
+import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
+import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
+import { matchCoverageRecord, evaluateEligibility } from '../lambda/diagnostics/coverage';
+import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/start';
+import { createHmac } from 'node:crypto';
 import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/start';
 import { createHmac } from 'node:crypto';
 
@@ -215,5 +221,37 @@ describe('payment integrity', () => {
 		const header = `sha256=${digest}`;
 		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 299)).toBe(true);
 		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 301)).toBe(false);
+	});
+});
+describe('diagnostics coverage', () => {
+	const records = [
+		{
+			id: 'ram-dt',
+			make: 'Ram',
+			model: '1500',
+			yearRange: [2019, 2024] as [number, number],
+			platform: 'DT',
+			procedures: {
+				add_key: { supported: true, authorizationRequired: 'autoauth_stellantis' },
+				erase_keys: { supported: false, authorizationRequired: null },
+			},
+			preconditions: ['Ignition ON'],
+			warnings: ['Authorization required'],
+			supported: 'requires_authorization',
+		},
+	];
+
+	test('matches platform and year range', () => {
+		expect(matchCoverageRecord(records, 'DT', 2020)?.id).toBe('ram-dt');
+		expect(matchCoverageRecord(records, 'XX', 2020)).toBeUndefined();
+	});
+
+	test('evaluates procedure eligibility and authorization requirements', () => {
+		const addKey = evaluateEligibility(matchCoverageRecord(records, 'DT', 2020), 'add_key');
+		expect(addKey.eligible).toBe(true);
+		expect(addKey.requiredAuth).toEqual(['autoauth_stellantis']);
+		const erase = evaluateEligibility(matchCoverageRecord(records, 'DT', 2020), 'erase_keys');
+		expect(erase.eligible).toBe(false);
+		expect(erase.blockers.length).toBeGreaterThan(0);
 	});
 });

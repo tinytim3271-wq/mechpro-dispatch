@@ -55,6 +55,11 @@ export class ApiStack extends Stack {
     });
     const checkoutFn = nodeFn('CheckoutFn', 'payments/checkout.ts');
     const entitlementFn = nodeFn('SubscriptionEntitlementFn', 'subscription/entitlement.ts');
+    const checkoutFn = nodeFn('CheckoutFn', 'payments/checkout.ts');
+    const entitlementFn = nodeFn('SubscriptionEntitlementFn', 'subscription/entitlement.ts');
+    const diagnosticsCoverageFn = nodeFn('DiagnosticsCoverageFn', 'diagnostics/coverage.ts');
+    const diagnosticsAuditFn = nodeFn('DiagnosticsAuditFn', 'diagnostics/audit.ts');
+    const diagnosticsAuthFn = nodeFn('DiagnosticsAuthFn', 'diagnostics/auth-proxy.ts');
     const webhookFn = nodeFn('StripeWebhookFn', 'payments/webhook.ts');
     const assistantFn = nodeFn('AssistantFn', 'ai/assistant.ts');
     assistantFn.addEnvironment('BEDROCK_MODEL_ID', 'us.amazon.nova-lite-v1:0');
@@ -92,7 +97,7 @@ export class ApiStack extends Stack {
       }));
     }
 
-    for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn]) {
+    for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn, diagnosticsAuditFn]) {
       props.table.grantReadWriteData(fn);
     }
     props.table.grantReadData(assistantFn);
@@ -185,6 +190,13 @@ export class ApiStack extends Stack {
     authorizedRoute('/entities/{type}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], entitiesFn);
     authorizedRoute('/entities/{type}/{id}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PUT, apigwv2.HttpMethod.DELETE], entitiesFn);
     authorizedRoute('/vehicles/decode/{vin}', [apigwv2.HttpMethod.GET], vehicleDecodeFn);
+    authorizedRoute('/entities/{type}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], entitiesFn);
+    authorizedRoute('/entities/{type}/{id}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PUT, apigwv2.HttpMethod.DELETE], entitiesFn);
+    authorizedRoute('/vehicles/decode/{vin}', [apigwv2.HttpMethod.GET], vehicleDecodeFn);
+    authorizedRoute('/diagnostics/coverage', [apigwv2.HttpMethod.GET], diagnosticsCoverageFn);
+    authorizedRoute('/diagnostics/coverage/bundle', [apigwv2.HttpMethod.GET], diagnosticsCoverageFn);
+    authorizedRoute('/diagnostics/audit', [apigwv2.HttpMethod.POST], diagnosticsAuditFn);
+    authorizedRoute('/diagnostics/authorize', [apigwv2.HttpMethod.POST], diagnosticsAuthFn);
     authorizedRoute('/admin/accounts', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], adminAccountsFn);
     authorizedRoute('/admin/accounts/{username}/reset-password', [apigwv2.HttpMethod.POST], adminAccountsFn);
     authorizedRoute('/admin/accounts/{username}/set-password', [apigwv2.HttpMethod.POST], adminAccountsFn);
@@ -224,6 +236,12 @@ export class ApiStack extends Stack {
       adminAccountsFn,
       checkoutFn,
       entitlementFn,
+      adminAccountsFn,
+      checkoutFn,
+      entitlementFn,
+      diagnosticsCoverageFn,
+      diagnosticsAuditFn,
+      diagnosticsAuthFn,
       webhookFn,
       assistantFn,
       agentPhoneWebhookFn,
@@ -237,34 +255,70 @@ export class ApiStack extends Stack {
       resource.retentionInDays = logs.RetentionDays.ONE_MONTH;
     }
     const aggregateFunctions = functions.filter(fn => fn !== onboardingFn && fn !== assistantFn && fn !== agentPhoneWebhookFn && fn !== agentPhoneConfigureFn);
-    const sumMetrics = (metricName: string, metric: (fn: lambda.Function) => cloudwatch.IMetric) =>
-      new cloudwatch.MathExpression({
-        expression: aggregateFunctions.map((_, index) => `${metricName}${index}`).join(' + '),
-        usingMetrics: Object.fromEntries(aggregateFunctions.map((fn, index) => [`${metricName}${index}`, metric(fn)])),
+    const sumMetrics = (metricName: string, metric: (fn: lambda.Function) => cloudwatch.IMetric) => {
+      const chunkSize = 10;
+      const chunks: cloudwatch.IMetric[] = [];
+      for (let offset = 0; offset < aggregateFunctions.length; offset += chunkSize) {
+        const slice = aggregateFunctions.slice(offset, offset + chunkSize);
+        chunks.push(new cloudwatch.MathExpression({
+          expression: slice.map((_, index) => `${metricName}${offset + index}`).join(' + '),
+          usingMetrics: Object.fromEntries(slice.map((fn, index) => [`${metricName}${offset + index}`, metric(fn)])),
+          period: Duration.minutes(1),
+        }));
+      }
+      if (chunks.length === 1) return chunks[0];
+      return new cloudwatch.MathExpression({
+        expression: chunks.map((_, index) => `${metricName}Chunk${index}`).join(' + '),
+        usingMetrics: Object.fromEntries(chunks.map((chunk, index) => [`${metricName}Chunk${index}`, chunk])),
         period: Duration.minutes(1),
       });
+    };
+        period: Duration.minutes(1),
+      });
+    };
     const invocations = sumMetrics('invocations', fn => fn.metricInvocations({ period: Duration.minutes(1) }));
     const errors = sumMetrics('errors', fn => fn.metricErrors({ period: Duration.minutes(1) }));
-    const throttles = sumMetrics('throttles', fn => fn.metricThrottles({ period: Duration.minutes(1) }));
 
-    const lambdaErrorAlarm = new cloudwatch.Alarm(this, 'LambdaErrorAlarm', {
-      alarmName: 'MechPro-Api-Lambda-Errors',
-      metric: errors,
-      threshold: 1,
-      evaluationPeriods: 3,
-      datapointsToAlarm: 2,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
-    const lambdaThrottleAlarm = new cloudwatch.Alarm(this, 'LambdaThrottleAlarm', {
-      alarmName: 'MechPro-Api-Lambda-Throttles',
-      metric: throttles,
-      threshold: 1,
-      evaluationPeriods: 3,
-      datapointsToAlarm: 2,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
+    const makeChunkedAlarm = (
+      id: string,
+      alarmName: string,
+      metric: (fn: lambda.Function) => cloudwatch.IMetric,
+    ): cloudwatch.IAlarm => {
+      const chunkSize = 10;
+      const chunkAlarms: cloudwatch.Alarm[] = [];
+      for (let offset = 0; offset < aggregateFunctions.length; offset += chunkSize) {
+        const slice = aggregateFunctions.slice(offset, offset + chunkSize);
+        const expr = new cloudwatch.MathExpression({
+          expression: slice.map((_, i) => `m${offset + i}`).join(' + '),
+          usingMetrics: Object.fromEntries(slice.map((fn, i) => [`m${offset + i}`, metric(fn)])),
+          period: Duration.minutes(1),
+        });
+        chunkAlarms.push(new cloudwatch.Alarm(this, `${id}Chunk${offset}`, {
+          metric: expr,
+          threshold: 1,
+          evaluationPeriods: 3,
+          datapointsToAlarm: 2,
+          comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+          treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+          ...(offset === 0 && aggregateFunctions.length <= chunkSize ? { alarmName } : {}),
+        }));
+      }
+      if (chunkAlarms.length === 1) return chunkAlarms[0];
+      return new cloudwatch.CompositeAlarm(this, id, {
+        compositeAlarmName: alarmName,
+        alarmRule: cloudwatch.AlarmRule.anyOf(...chunkAlarms),
+      });
+    };
+    const lambdaErrorAlarm = makeChunkedAlarm(
+      'LambdaErrorAlarm',
+      'MechPro-Api-Lambda-Errors',
+      fn => fn.metricErrors({ period: Duration.minutes(1) }),
+    );
+    const lambdaThrottleAlarm = makeChunkedAlarm(
+      'LambdaThrottleAlarm',
+      'MechPro-Api-Lambda-Throttles',
+      fn => fn.metricThrottles({ period: Duration.minutes(1) }),
+    );
     const api5xxAlarm = new cloudwatch.Alarm(this, 'Api5xxAlarm', {
       alarmName: 'MechPro-Api-5xx-Errors',
       metric: this.httpApi.metricServerError({ period: Duration.minutes(1) }),

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MechPro OEM Diagnostics Demo</title>
+  <link rel="stylesheet" href="../styles.css?v=15" />
+  <link rel="stylesheet" href="../theme.css?v=15" />
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="toast-region"></div>
+  <script>
+    const RPC = 'http://127.0.0.1:39254/rpc';
+    const state = { route: 'oem-diagnostics' };
+    function icon(name, size = 18) { return `<i data-lucide="${name}" style="width:${size}px;height:${size}px"></i>`; }
+    function escapeHtml(v) { return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function shell(content) { return `<main class="main" style="padding:24px"><div class="content">${content}</div></main>`; }
+    function heading(k, t, d) { return `<div class="page-head"><div><div class="eyebrow">${k}</div><h1>${t}</h1><p>${d}</p></div></div>`; }
+    function toast(msg) { const n = document.createElement('div'); n.className = 'toast'; n.textContent = msg; document.querySelector('#toast-region').append(n); setTimeout(() => n.remove(), 2600); }
+    async function apiFetch(path) {
+      if (path.includes('/diagnostics/coverage/bundle')) return fetch('./coverage/seed/dodge-ram-coverage.json').then((r) => r.json());
+      throw new Error('offline');
+    }
+    function render() {
+      document.querySelector('#root').innerHTML = oemDiagnosticsView();
+      lucide.createIcons();
+      bindOemDiagnostics();
+    }
+    async function rpc(method, params = {}) {
+      const response = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }) });
+      const payload = await response.json();
+      if (payload.error) throw new Error(payload.error.message);
+      return payload.result;
+    }
+    window.mechproDesktop = { platform: 'demo', version: 'demo' };
+    window.mechproDiagnostics = {
+      listAdapters: () => rpc('listAdapters'),
+      connect: (p) => rpc('connect', p),
+      disconnect: () => rpc('disconnect'),
+      getConnectionStatus: () => rpc('getConnectionStatus'),
+      readVin: () => rpc('readVin'),
+      identifyEcus: () => rpc('identifyEcus'),
+      readDtcs: () => rpc('readDtcs'),
+      clearDtcs: () => rpc('clearDtcs'),
+      startLiveLog: () => rpc('startLiveLog'),
+      stopLiveLog: () => rpc('stopLiveLog'),
+      pollLiveLog: (since) => rpc('pollLiveLog', { since }),
+      identifyVehicle: () => rpc('identifyVehicle'),
+    };
+  </script>
+  <script src="../diagnostics-ui.js?v=1"></script>
+  <script>render();</script>
+</body>
+</html>

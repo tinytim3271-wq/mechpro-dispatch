@@ -1,6 +1,15 @@
 node_modules/
 infra/node_modules/
 dist/
+node_modules/
+infra/node_modules/
+dist/
+diagnostics/j2534-service/publish/
+diagnostics/j2534-service/**/bin/
+diagnostics/j2534-service/**/obj/
+infra/cdk.out/
+infra/.cdk.staging/
+*.log
 infra/cdk.out/
 infra/.cdk.staging/
 *.log
