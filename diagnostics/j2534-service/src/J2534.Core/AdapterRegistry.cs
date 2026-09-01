@@ -7,6 +7,14 @@ public static class AdapterRegistry
 {
     const string SimulatorId = "simulator";
 
+    static readonly string[] RegistryRoots =
+    [
+        @"SOFTWARE\PassThruSupport.04.04",
+        @"SOFTWARE\WOW6432Node\PassThruSupport.04.04",
+        @"SOFTWARE\PassThruSupport.04.02",
+        @"SOFTWARE\WOW6432Node\PassThruSupport.04.02",
+    ];
+
     public static object ListAdapters()
     {
         var adapters = EnumerateHardwareAdapters();
@@ -27,33 +35,85 @@ public static class AdapterRegistry
         var adapters = new List<AdapterInfo>();
         if (!OperatingSystem.IsWindows()) return adapters;
 
-        try
+        var seenDlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in RegistryRoots)
         {
-            using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\PassThruSupport.04.04");
-            if (key is null) return adapters;
-
-            foreach (var name in key.GetSubKeyNames())
+            try
             {
-                using var sub = key.OpenSubKey(name);
-                var dll = sub?.GetValue("FunctionLibrary") as string;
-                if (string.IsNullOrWhiteSpace(dll)) continue;
-                adapters.Add(new AdapterInfo
+                using var key = Registry.LocalMachine.OpenSubKey(root);
+                if (key is null) continue;
+                foreach (var entry in ReadAdaptersFromKey(key, root))
                 {
-                    Id = $"registry-{name}",
-                    Name = name,
-                    Vendor = name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? name,
-                    DllPath = dll,
-                    Protocols = ["CAN", "ISO15765", "ISO15765_FD"],
-                    Firmware = "unknown",
-                });
+                    if (!seenDlls.Add(entry.DllPath)) continue;
+                    adapters.Add(entry);
+                }
             }
-        }
-        catch
-        {
-            // Registry access may fail in restricted environments.
+            catch
+            {
+                // Registry access may fail in restricted environments.
+            }
         }
 
         return adapters;
+    }
+
+    static IEnumerable<AdapterInfo> ReadAdaptersFromKey(RegistryKey key, string root)
+    {
+        foreach (var subKeyName in key.GetSubKeyNames())
+        {
+            using var sub = key.OpenSubKey(subKeyName);
+            var dll = sub?.GetValue("FunctionLibrary") as string;
+            if (string.IsNullOrWhiteSpace(dll)) continue;
+
+            var displayName = sub?.GetValue("Name") as string;
+            if (string.IsNullOrWhiteSpace(displayName)) displayName = subKeyName;
+
+            var vendor = sub?.GetValue("Vendor") as string;
+            if (string.IsNullOrWhiteSpace(vendor))
+                vendor = displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? displayName;
+
+            yield return new AdapterInfo
+            {
+                Id = BuildAdapterId(root, subKeyName, dll),
+                Name = displayName,
+                Vendor = vendor,
+                DllPath = dll,
+                Protocols = ReadProtocols(sub),
+                Firmware = "unknown",
+            };
+        }
+    }
+
+    static string[] ReadProtocols(RegistryKey? sub)
+    {
+        if (sub is null) return ["CAN", "ISO15765"];
+        var protocols = new List<string>();
+        if (ReadFlag(sub, "CAN")) protocols.Add("CAN");
+        if (ReadFlag(sub, "ISO15765")) protocols.Add("ISO15765");
+        if (ReadFlag(sub, "ISO15765_FD")) protocols.Add("ISO15765_FD");
+        if (ReadFlag(sub, "ISO9141")) protocols.Add("ISO9141");
+        if (ReadFlag(sub, "ISO14230")) protocols.Add("ISO14230");
+        return protocols.Count > 0 ? protocols.ToArray() : ["CAN", "ISO15765"];
+    }
+
+    static bool ReadFlag(RegistryKey sub, string name)
+    {
+        var value = sub.GetValue(name);
+        return value switch
+        {
+            int i => i != 0,
+            long l => l != 0,
+            string s => s is "1" or "true" or "TRUE",
+            _ => false,
+        };
+    }
+
+    static string BuildAdapterId(string root, string subKeyName, string dllPath)
+    {
+        var scope = root.Contains("WOW6432Node", StringComparison.OrdinalIgnoreCase) ? "wow64" : "native";
+        var version = root.Contains("04.02", StringComparison.Ordinal) ? "0402" : "0404";
+        var slug = subKeyName.Replace(' ', '-').ToLowerInvariant();
+        return $"registry-{scope}-{version}-{slug}";
     }
 
     static AdapterInfo CreateSimulatorAdapter() => new()

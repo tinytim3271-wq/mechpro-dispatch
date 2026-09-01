@@ -24,8 +24,23 @@ Output: `publish/win-x64/J2534.Host.exe` (self-contained .NET 8, win-x64).
 
 - .NET 8 SDK
 - Windows 10/11 x64 at runtime
-- Vendor J2534 driver installed (`HKLM\SOFTWARE\PassThruSupport.04.04`)
+- Vendor J2534 driver installed and registered in Windows (see below)
 - USB J2534 Pass-Thru adapter
+
+### Windows registry
+
+MechPro scans these locations (most USB adapters, including TOPDON RLink X7, register under **WOW6432Node** on 64-bit Windows):
+
+- `HKLM\SOFTWARE\PassThruSupport.04.04`
+- `HKLM\SOFTWARE\WOW6432Node\PassThruSupport.04.04`
+- `HKLM\SOFTWARE\PassThruSupport.04.02`
+- `HKLM\SOFTWARE\WOW6432Node\PassThruSupport.04.02`
+
+### TOPDON RLink X7
+
+1. Install **RLink Platform** from TOPDON and register/activate the device.
+2. In RLink Platform: **Drivers → Driver Download** — install the J2534 driver for your target OEM stack.
+3. Plug the X7 into USB, wait for Windows to finish installing, then click **Refresh** in MechPro OEM Diagnostics.
 
 ## Simulator
 
