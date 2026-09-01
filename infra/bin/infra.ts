@@ -30,7 +30,6 @@ let cdnStack: CdnStack | undefined;
 if (app.node.tryGetContext('enableCustomDomain') === true) {
   cdnStack = new CdnStack(app, 'MechProCdnStack', { env, domainName: 'www.yourcarguy806.com' });
 }
-}
 
 const githubRepository = app.node.tryGetContext('githubRepository');
 if (githubRepository) {

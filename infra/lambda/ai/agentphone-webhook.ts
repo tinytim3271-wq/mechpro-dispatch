@@ -4,11 +4,12 @@ import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-sec
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { ddb, TABLE_NAME } from '../common/ddb';
+import { appUrl } from '../common/runtime-env';
 
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'us-east-1', maxAttempts: 5, retryMode: 'adaptive' });
 const secrets = new SecretsManagerClient({});
 const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'us.amazon.nova-lite-v1:0';
-const APP_URL = process.env.APP_URL || 'http://mechprostaticsitestack-mechprositebucket45bd4c2e-9sirc627wf04.s3-website-us-east-1.amazonaws.com';
+const APP_URL = appUrl();
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return { statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };

@@ -55,8 +55,6 @@ export class ApiStack extends Stack {
     });
     const checkoutFn = nodeFn('CheckoutFn', 'payments/checkout.ts');
     const entitlementFn = nodeFn('SubscriptionEntitlementFn', 'subscription/entitlement.ts');
-    const checkoutFn = nodeFn('CheckoutFn', 'payments/checkout.ts');
-    const entitlementFn = nodeFn('SubscriptionEntitlementFn', 'subscription/entitlement.ts');
     const diagnosticsCoverageFn = nodeFn('DiagnosticsCoverageFn', 'diagnostics/coverage.ts');
     const diagnosticsAuditFn = nodeFn('DiagnosticsAuditFn', 'diagnostics/audit.ts');
     const diagnosticsAuthFn = nodeFn('DiagnosticsAuthFn', 'diagnostics/auth-proxy.ts');
@@ -190,9 +188,6 @@ export class ApiStack extends Stack {
     authorizedRoute('/entities/{type}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], entitiesFn);
     authorizedRoute('/entities/{type}/{id}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PUT, apigwv2.HttpMethod.DELETE], entitiesFn);
     authorizedRoute('/vehicles/decode/{vin}', [apigwv2.HttpMethod.GET], vehicleDecodeFn);
-    authorizedRoute('/entities/{type}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], entitiesFn);
-    authorizedRoute('/entities/{type}/{id}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PUT, apigwv2.HttpMethod.DELETE], entitiesFn);
-    authorizedRoute('/vehicles/decode/{vin}', [apigwv2.HttpMethod.GET], vehicleDecodeFn);
     authorizedRoute('/diagnostics/coverage', [apigwv2.HttpMethod.GET], diagnosticsCoverageFn);
     authorizedRoute('/diagnostics/coverage/bundle', [apigwv2.HttpMethod.GET], diagnosticsCoverageFn);
     authorizedRoute('/diagnostics/audit', [apigwv2.HttpMethod.POST], diagnosticsAuditFn);
@@ -236,9 +231,6 @@ export class ApiStack extends Stack {
       adminAccountsFn,
       checkoutFn,
       entitlementFn,
-      adminAccountsFn,
-      checkoutFn,
-      entitlementFn,
       diagnosticsCoverageFn,
       diagnosticsAuditFn,
       diagnosticsAuthFn,
@@ -270,9 +262,6 @@ export class ApiStack extends Stack {
       return new cloudwatch.MathExpression({
         expression: chunks.map((_, index) => `${metricName}Chunk${index}`).join(' + '),
         usingMetrics: Object.fromEntries(chunks.map((chunk, index) => [`${metricName}Chunk${index}`, chunk])),
-        period: Duration.minutes(1),
-      });
-    };
         period: Duration.minutes(1),
       });
     };
