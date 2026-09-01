@@ -8,8 +8,8 @@
   "scripts": {
     "desktop": "electron .",
     "build:j2534": "bash diagnostics/j2534-service/scripts/publish-win-x64.sh",
-    "build:windows": "npm run build:j2534 && electron-builder --win nsis",
-    "build:windows:zip": "npm run build:j2534 && electron-builder --win zip",
+    "build:windows": "npm run build:j2534 && electron-builder --win nsis --publish never",
+    "build:windows:zip": "npm run build:j2534 && electron-builder --win zip --publish never",
     "test:j2534": "node diagnostics/j2534-host-node/test/host.test.js"
   },
   "devDependencies": {
@@ -20,6 +20,7 @@
     "appId": "com.mechpro.dispatch",
     "productName": "MechPro",
     "artifactName": "MechPro-Setup-${version}.${ext}",
+    "publish": null,
     "directories": {
       "output": "dist/windows"
     },
