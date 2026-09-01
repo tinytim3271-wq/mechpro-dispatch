@@ -5,6 +5,7 @@ import { DataStack } from '../lib/data-stack';
 import { AuthStack } from '../lib/auth-stack';
 import { ApiStack } from '../lib/api-stack';
 import { StaticSiteStack } from '../lib/static-site-stack';
+import { CdnStack } from '../lib/cdn-stack';
 import { GitHubActionsStack } from '../lib/github-actions-stack';
 
 const app = new cdk.App();
@@ -22,8 +23,11 @@ new ApiStack(app, 'MechProApiStack', {
   userPoolClient: authStack.userPoolClient,
 });
 
-// Interim static hosting until the AWS account is verified for CloudFront (see MechProWafStack/MechProCdnStack, kept but not deployed).
+// Keep the interim bucket active until AWS verifies CloudFront access for this account.
 new StaticSiteStack(app, 'MechProStaticSiteStack', { env });
+if (app.node.tryGetContext('enableCustomDomain') === true) {
+  new CdnStack(app, 'MechProCdnStack', { env, domainName: 'www.yourcarguy806.com' });
+}
 
 const githubRepository = app.node.tryGetContext('githubRepository');
 if (githubRepository) {

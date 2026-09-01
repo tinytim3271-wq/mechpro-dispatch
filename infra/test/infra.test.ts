@@ -1,5 +1,131 @@
 import { buildPayrollEntries, weekPeriod } from '../lambda/payroll/sync';
 import { buildTaxReport, invoiceTaxBreakdown } from '../lambda/tax/report';
+import { creditAmount, ownerEmployeeProfile, validPassword, validShopId } from '../lambda/admin/accounts';
+import { deletionConflict, entityPrefix } from '../lambda/entities/handler';
+import { normalizeVinResult, validVin } from '../lambda/vehicles/decode';
+import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout';
+import { verifyStripeSignature } from '../lambda/payments/webhook';
+import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
+import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
+import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/start';
+import { createHmac } from 'node:crypto';
+
+describe('desktop subscription entitlement', () => {
+	test('allows active and trial subscriptions that have not expired', () => {
+		const now = new Date('2026-08-17T12:00:00.000Z');
+		expect(subscriptionEntitlement({ subscriptionStatus: 'active' }, now).active).toBe(true);
+		expect(subscriptionEntitlement({ subscriptionStatus: 'trialing', subscriptionExpiresAt: '2026-08-18T00:00:00.000Z' }, now).active).toBe(true);
+	});
+
+	test('rejects missing, suspended, inactive, and expired accounts', () => {
+		const now = new Date('2026-08-17T12:00:00.000Z');
+		expect(subscriptionEntitlement(undefined, now).active).toBe(false);
+		expect(subscriptionEntitlement({ suspended: true }, now).status).toBe('suspended');
+		expect(subscriptionEntitlement({ subscriptionStatus: 'past_due' }, now).active).toBe(false);
+		expect(subscriptionEntitlement({ subscriptionStatus: 'active', subscriptionExpiresAt: '2026-08-17T11:59:59.000Z' }, now).status).toBe('expired');
+	});
+});
+
+describe('super admin account controls', () => {
+	test('accepts normalized tenant IDs and rejects unsafe IDs', () => {
+		expect(validShopId('high-plains-auto')).toBe(true);
+		expect(validShopId('ab')).toBe(false);
+		expect(validShopId('High Plains')).toBe(false);
+	});
+
+	test('accepts positive currency credits and rejects zero or negative values', () => {
+		expect(creditAmount('25.678')).toBe(25.68);
+		expect(creditAmount(0)).toBeNull();
+		expect(creditAmount(-10)).toBeNull();
+	});
+
+	test('requires a strong permanent password', () => {
+		expect(validPassword('LongEnough1!')).toBe(true);
+		expect(validPassword('Short1!')).toBe(false);
+		expect(validPassword('nouppercase1!')).toBe(false);
+		expect(validPassword('NOLOWERCASE1!')).toBe(false);
+		expect(validPassword('MissingNumber!')).toBe(false);
+		expect(validPassword('MissingSymbol1')).toBe(false);
+	});
+
+	test('provisions a tenant-scoped owner employee profile for each customer account', () => {
+		const profile = ownerEmployeeProfile('high-plains-auto', 'Alex Owner', 'alex@example.com', '2026-08-17T12:00:00.000Z');
+		expect(profile).toMatchObject({
+			id: 'owner-high-plains-auto',
+			pk: 'SHOP#high-plains-auto',
+			sk: 'EMPLOYEE#owner-high-plains-auto',
+			shopId: 'high-plains-auto',
+			name: 'Alex Owner',
+			email: 'alex@example.com',
+			role: 'admin',
+			active: true,
+		});
+	});
+});
+
+describe('shop entity controls', () => {
+	test('supports all linked shop-management records and rejects unknown types', () => {
+		expect(entityPrefix('inventory')).toBe('INVENTORY');
+		expect(entityPrefix('inspectionTemplates')).toBe('INSPECTIONTEMPLATE');
+		expect(entityPrefix('inspections')).toBe('INSPECTION');
+		expect(entityPrefix('reminders')).toBe('REMINDER');
+		expect(entityPrefix('vendors')).toBe('VENDOR');
+		expect(entityPrefix('services')).toBe('SERVICE');
+		expect(entityPrefix('shopSettings')).toBe('SHOPSETTING');
+		expect(entityPrefix('appointments')).toBe('APPOINTMENT');
+		expect(entityPrefix('purchases')).toBe('PURCHASE');
+		expect(entityPrefix('not-a-real-entity')).toBeUndefined();
+	});
+
+	test('protects linked customers while allowing invoice deletion with payment history', () => {
+		expect(deletionConflict('customers', { name: 'Alex Owner' }, [
+			{ sk: 'ORDER#RO-1', customer: 'Alex Owner' },
+		])).toContain('work orders');
+		expect(deletionConflict('customers', { name: 'Alex Owner' }, [
+			{ sk: 'ORDER#RO-1', customer: 'Another Customer' },
+		])).toBeNull();
+		expect(deletionConflict('invoices', { number: 'INV-1' }, [
+			{ sk: 'PAYMENT#payment-1', invoiceNumber: 'INV-1' },
+		])).toBeNull();
+		expect(deletionConflict('invoices', { number: 'INV-1' }, [])).toBeNull();
+	});
+});
+
+describe('onboarding sample cleanup', () => {
+	test('recognizes bundled and explicitly marked samples without matching normal shop data', () => {
+		expect(isSampleRecord({ sk: 'ORDER#RO-1048', id: 'RO-1048' })).toBe(true);
+		expect(isSampleRecord({ sk: 'INVOICE#INV-2041', id: 'INV-2041', number: 'INV-2041' })).toBe(true);
+		expect(isSampleRecord({ sk: 'CUSTOMER#legacy-id', name: 'Maria Hernandez' })).toBe(true);
+		expect(isSampleRecord({ sk: 'EXPENSE#legacy-id', vendor: 'City of Lubbock', memo: 'Shop electric service', amount: 286.14 })).toBe(true);
+		expect(isSampleRecord({ sk: 'VEHICLE#sample', sampleData: true })).toBe(true);
+		expect(isSampleRecord({ sk: 'ORDER#RO-9000', id: 'RO-9000', customer: 'Real Customer' })).toBe(false);
+		expect(isSampleRecord({ sk: 'EMPLOYEE#owner-shop', id: 'owner-shop' })).toBe(false);
+	});
+
+	test('full reset preserves employee access and removes all other shop records', () => {
+		expect(isResettableShopRecord({ sk: 'EMPLOYEE#owner-shop' })).toBe(false);
+		expect(isResettableShopRecord({ sk: 'EMPLOYEE#technician-1' })).toBe(false);
+		expect(isResettableShopRecord({ sk: 'CUSTOMER#real-customer' })).toBe(true);
+		expect(isResettableShopRecord({ sk: 'INVOICE#INV-9000' })).toBe(true);
+		expect(isResettableShopRecord({ sk: 'SHOPSETTING#profile' })).toBe(true);
+		expect(isResettableShopRecord({ sk: 'VINDECODE#1HGCM82633A004352' })).toBe(true);
+	});
+});
+
+describe('vehicle decoding', () => {
+	test('validates VIN characters and normalizes NHTSA data', () => {
+		expect(validVin('1HGCM82633A004352')).toBe(true);
+		expect(validVin('1HGCM82633A00I352')).toBe(false);
+		expect(validVin('short')).toBe(false);
+		expect(normalizeVinResult({
+			VIN: '1hgcm82633a004352', ModelYear: '2003', Make: 'HONDA', Model: 'Accord',
+			Trim: 'EX', FuelTypePrimary: 'Gasoline', DisplacementL: '3', ErrorCode: '0',
+		})).toMatchObject({
+			vin: '1HGCM82633A004352', year: '2003', make: 'HONDA', model: 'Accord',
+			trim: 'EX', fuelType: 'Gasoline', engineDisplacementLiters: '3', errorCode: '0',
+		});
+	});
+});
 
 describe('tax reporting math', () => {
 	test('splits a tax-inclusive invoice and preserves explicit tax values', () => {
@@ -56,5 +182,38 @@ describe('payroll math', () => {
 			{ id: 'RO-5', hours: 2, gross: 0 },
 		]);
 		expect(entries.every(entry => entry.periodKey === '2026-08-10' && entry.shopId === 'shop-1')).toBe(true);
+	});
+});
+
+describe('payment integrity', () => {
+	test('charges only the unpaid invoice balance', () => {
+		expect(openInvoiceBalance(125, [
+			{ amount: 25, status: 'completed' },
+			{ amount: 50, status: 'pending' },
+		])).toBe(100);
+		expect(openInvoiceBalance(25, [{ amount: 30, status: 'completed' }])).toBe(0);
+	});
+
+	test('accepts only checkout redirects on the requesting origin', () => {
+		expect(safeCheckoutUrl('https://shop.example/invoices#paid', 'https://shop.example')).toBe('https://shop.example/invoices#paid');
+		expect(safeCheckoutUrl('https://attacker.example/paid', 'https://shop.example')).toBeNull();
+	});
+
+	test('rejects stale Stripe signatures', () => {
+		const payload = '{"id":"evt_1"}';
+		const timestamp = 1_800_000_000;
+		const signature = createHmac('sha256', 'secret').update(`${timestamp}.${payload}`).digest('hex');
+		const header = `t=${timestamp},v1=${signature}`;
+		expect(verifyStripeSignature(payload, header, 'secret', timestamp + 299)).toBe(true);
+		expect(verifyStripeSignature(payload, header, 'secret', timestamp + 301)).toBe(false);
+	});
+
+	test('verifies AgentPhone signatures and rejects stale deliveries', () => {
+		const payload = '{"event":"agent.message"}';
+		const timestamp = 1_800_000_000;
+		const digest = createHmac('sha256', 'secret').update(`${timestamp}.${payload}`).digest('hex');
+		const header = `sha256=${digest}`;
+		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 299)).toBe(true);
+		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 301)).toBe(false);
 	});
 });

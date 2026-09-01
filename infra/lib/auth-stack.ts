@@ -42,7 +42,7 @@ export class AuthStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
-    for (const groupName of ['admin', 'technician', 'office', 'service_writer']) {
+    for (const groupName of ['super_admin', 'admin', 'technician', 'office', 'service_writer']) {
       new cognito.CfnUserPoolGroup(this, `${groupName}Group`, {
         userPoolId: this.userPool.userPoolId,
         groupName,

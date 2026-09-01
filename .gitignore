@@ -1,5 +1,6 @@
 node_modules/
 infra/node_modules/
+dist/
 infra/cdk.out/
 infra/.cdk.staging/
 *.log

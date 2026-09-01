@@ -39,10 +39,29 @@ export class ApiStack extends Stack {
       });
 
     const entitiesFn = nodeFn('EntitiesFn', 'entities/handler.ts');
+    const vehicleDecodeFn = nodeFn('VehicleDecodeFn', 'vehicles/decode.ts');
     const payrollSyncFn = nodeFn('PayrollSyncFn', 'payroll/sync.ts');
     const taxReportFn = nodeFn('TaxReportFn', 'tax/report.ts');
+    const onboardingFn = nodeFn('OnboardingFn', 'onboarding/start.ts');
+    const adminAccountsFn = new lambda.Function(this, 'AdminAccountsFn', {
+      code: bundledLambdaCode(path.join(__dirname, '..', 'lambda', 'admin/accounts.ts')),
+      handler: 'index.handler',
+      runtime: lambda.Runtime.NODEJS_24_X,
+      architecture: lambda.Architecture.ARM_64,
+      timeout: Duration.seconds(15),
+      memorySize: 256,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: { TABLE_NAME: props.table.tableName, USER_POOL_ID: props.userPool.userPoolId },
+    });
     const checkoutFn = nodeFn('CheckoutFn', 'payments/checkout.ts');
+    const entitlementFn = nodeFn('SubscriptionEntitlementFn', 'subscription/entitlement.ts');
     const webhookFn = nodeFn('StripeWebhookFn', 'payments/webhook.ts');
+    const assistantFn = nodeFn('AssistantFn', 'ai/assistant.ts');
+    assistantFn.addEnvironment('BEDROCK_MODEL_ID', 'us.amazon.nova-lite-v1:0');
+    const agentPhoneWebhookFn = nodeFn('AgentPhoneWebhookFn', 'ai/agentphone-webhook.ts');
+    agentPhoneWebhookFn.addEnvironment('BEDROCK_MODEL_ID', 'us.amazon.nova-lite-v1:0');
+    const agentPhoneConfigureFn = nodeFn('AgentPhoneConfigureFn', 'ai/agentphone-configure.ts');
+    agentPhoneConfigureFn.addEnvironment('API_URL', 'https://njz0co209l.execute-api.us-east-1.amazonaws.com');
     const presignCode = bundledLambdaCode(path.join(__dirname, '..', 'lambda', 'files/presign.ts'));
     const presignUploadFn = new lambda.Function(this, 'PresignUploadFn', {
       code: presignCode,
@@ -66,11 +85,73 @@ export class ApiStack extends Stack {
     });
     props.filesBucket.grantPut(presignUploadFn);
     props.filesBucket.grantRead(presignDownloadFn);
+    for (const fn of [presignUploadFn, presignDownloadFn]) {
+      fn.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['dynamodb:GetItem'],
+        resources: [props.table.tableArn],
+      }));
+    }
 
-    for (const fn of [entitiesFn, payrollSyncFn, taxReportFn, checkoutFn]) {
+    for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn]) {
       props.table.grantReadWriteData(fn);
     }
-    props.table.grantReadData(webhookFn);
+    props.table.grantReadData(assistantFn);
+    props.table.grantReadWriteData(agentPhoneWebhookFn);
+    assistantFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: ['*'],
+    }));
+    agentPhoneWebhookFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: ['*'],
+    }));
+    agentPhoneWebhookFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['secretsmanager:GetSecretValue'],
+      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:mechpro/*`],
+    }));
+    agentPhoneWebhookFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:GetItem'],
+      resources: [props.table.tableArn],
+    }));
+    agentPhoneConfigureFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['secretsmanager:CreateSecret', 'secretsmanager:PutSecretValue'],
+      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:mechpro/*`],
+    }));
+    agentPhoneConfigureFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:PutItem'],
+      resources: [props.table.tableArn],
+    }));
+    onboardingFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:BatchWriteItem', 'dynamodb:PutItem'],
+      resources: [props.table.tableArn],
+    }));
+    props.table.grantReadData(entitlementFn);
+    adminAccountsFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'dynamodb:GetItem',
+        'dynamodb:PutItem',
+        'dynamodb:Query',
+        'dynamodb:UpdateItem',
+        'dynamodb:TransactWriteItems',
+      ],
+      resources: [props.table.tableArn, `${props.table.tableArn}/index/*`],
+    }));
+    adminAccountsFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'cognito-idp:AdminCreateUser',
+        'cognito-idp:AdminDisableUser',
+        'cognito-idp:AdminEnableUser',
+        'cognito-idp:AdminResetUserPassword',
+        'cognito-idp:AdminSetUserPassword',
+        'cognito-idp:AdminUserGlobalSignOut',
+        'cognito-idp:ListUsers',
+      ],
+      resources: [props.userPool.userPoolArn],
+    }));
+    webhookFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
+      resources: [props.table.tableArn],
+    }));
 
     const secretsReadPolicy = new iam.PolicyStatement({
       actions: ['secretsmanager:GetSecretValue'],
@@ -103,9 +184,19 @@ export class ApiStack extends Stack {
 
     authorizedRoute('/entities/{type}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], entitiesFn);
     authorizedRoute('/entities/{type}/{id}', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PUT, apigwv2.HttpMethod.DELETE], entitiesFn);
+    authorizedRoute('/vehicles/decode/{vin}', [apigwv2.HttpMethod.GET], vehicleDecodeFn);
+    authorizedRoute('/admin/accounts', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], adminAccountsFn);
+    authorizedRoute('/admin/accounts/{username}/reset-password', [apigwv2.HttpMethod.POST], adminAccountsFn);
+    authorizedRoute('/admin/accounts/{username}/set-password', [apigwv2.HttpMethod.POST], adminAccountsFn);
+    authorizedRoute('/admin/accounts/{shopId}/credits', [apigwv2.HttpMethod.POST], adminAccountsFn);
+    authorizedRoute('/admin/accounts/{shopId}/status', [apigwv2.HttpMethod.POST], adminAccountsFn);
     authorizedRoute('/payroll/sync', [apigwv2.HttpMethod.POST], payrollSyncFn);
     authorizedRoute('/tax-report', [apigwv2.HttpMethod.GET], taxReportFn);
+    authorizedRoute('/onboarding/start', [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST], onboardingFn);
     authorizedRoute('/payments/checkout-session', [apigwv2.HttpMethod.POST], checkoutFn);
+    authorizedRoute('/subscription/entitlement', [apigwv2.HttpMethod.GET], entitlementFn);
+    authorizedRoute('/ai/assistant', [apigwv2.HttpMethod.POST], assistantFn);
+    authorizedRoute('/agentphone/configure', [apigwv2.HttpMethod.POST], agentPhoneConfigureFn);
     authorizedRoute('/files/presign-upload', [apigwv2.HttpMethod.POST], presignUploadFn);
     authorizedRoute('/files/presign-download', [apigwv2.HttpMethod.GET], presignDownloadFn);
 
@@ -115,16 +206,28 @@ export class ApiStack extends Stack {
       methods: [apigwv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration('StripeWebhookIntegration', webhookFn),
     });
+    this.httpApi.addRoutes({
+      path: '/agentphone/webhook/{shopId}',
+      methods: [apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('AgentPhoneWebhookIntegration', agentPhoneWebhookFn),
+    });
     // Note: AWS WAF does not support API Gateway HTTP APIs (v2) as an attachment target
     // (only REST APIs, ALB, CloudFront, AppSync, Cognito, App Runner). The CLOUDFRONT-scoped
     // WebACL from MechProWafStack will front this API once traffic is routed through CloudFront.
 
     const functions = [
       entitiesFn,
+      vehicleDecodeFn,
       payrollSyncFn,
       taxReportFn,
+      onboardingFn,
+      adminAccountsFn,
       checkoutFn,
+      entitlementFn,
       webhookFn,
+      assistantFn,
+      agentPhoneWebhookFn,
+      agentPhoneConfigureFn,
       presignUploadFn,
       presignDownloadFn,
     ];
@@ -133,10 +236,11 @@ export class ApiStack extends Stack {
       const resource = logGroup.node.defaultChild as logs.CfnLogGroup;
       resource.retentionInDays = logs.RetentionDays.ONE_MONTH;
     }
+    const aggregateFunctions = functions.filter(fn => fn !== onboardingFn && fn !== assistantFn && fn !== agentPhoneWebhookFn && fn !== agentPhoneConfigureFn);
     const sumMetrics = (metricName: string, metric: (fn: lambda.Function) => cloudwatch.IMetric) =>
       new cloudwatch.MathExpression({
-        expression: functions.map((_, index) => `${metricName}${index}`).join(' + '),
-        usingMetrics: Object.fromEntries(functions.map((fn, index) => [`${metricName}${index}`, metric(fn)])),
+        expression: aggregateFunctions.map((_, index) => `${metricName}${index}`).join(' + '),
+        usingMetrics: Object.fromEntries(aggregateFunctions.map((fn, index) => [`${metricName}${index}`, metric(fn)])),
         period: Duration.minutes(1),
       });
     const invocations = sumMetrics('invocations', fn => fn.metricInvocations({ period: Duration.minutes(1) }));
@@ -195,8 +299,8 @@ export class ApiStack extends Stack {
         width: 12,
         height: 6,
         title: 'Lambda invocations and errors',
-        left: [invocations],
-        right: [errors],
+        left: [invocations, onboardingFn.metricInvocations({ period: Duration.minutes(1), label: 'Onboarding invocations' })],
+        right: [errors, onboardingFn.metricErrors({ period: Duration.minutes(1), label: 'Onboarding errors' })],
       }),
       new cloudwatch.GraphWidget({
         width: 12,

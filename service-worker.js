@@ -1,10 +1,11 @@
-const CACHE_NAME = 'mechpro-shell-v3';
+const CACHE_NAME = 'mechpro-shell-v15';
 const LUCIDE_URL = 'https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js';
 const SHELL_FILES = [
   './',
   './index.html',
   './app.js',
   './styles.css',
+  './theme.css',
   './manifest.webmanifest',
   './mechpro-icon.svg',
 ];
@@ -45,6 +46,21 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(() => caches.match('./index.html')),
+    );
+    return;
+  }
+
+  if (['script', 'style'].includes(request.destination)) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request)),
     );
     return;
   }
