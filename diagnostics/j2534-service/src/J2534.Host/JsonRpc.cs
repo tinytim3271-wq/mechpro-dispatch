@@ -37,7 +37,7 @@ public sealed class JsonRpcResponse
     public static JsonRpcResponse Ok(object? id, object result) =>
         new() { Id = id, Result = result };
 
-    public static JsonRpcResponse Error(object? id, int code, string message) =>
+    public static JsonRpcResponse Fail(object? id, int code, string message) =>
         new() { Id = id, Error = new JsonRpcError { Code = code, Message = message } };
 }
 

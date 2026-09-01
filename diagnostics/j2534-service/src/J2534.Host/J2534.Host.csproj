@@ -6,9 +6,6 @@
     <Nullable>enable</Nullable>
     <RootNamespace>MechPro.J2534.Host</RootNamespace>
     <AssemblyName>J2534.Host</AssemblyName>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\J2534.Core\J2534.Core.csproj" />

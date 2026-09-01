@@ -10,4 +10,7 @@
     <ProjectReference Include="..\J2534.IsoTp\J2534.IsoTp.csproj" />
     <ProjectReference Include="..\J2534.Uds\J2534.Uds.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
+  </ItemGroup>
 </Project>

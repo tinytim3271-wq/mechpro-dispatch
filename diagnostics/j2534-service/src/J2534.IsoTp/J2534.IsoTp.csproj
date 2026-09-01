@@ -5,4 +5,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>MechPro.J2534.IsoTp</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\J2534.Native\J2534.Native.csproj" />
+  </ItemGroup>
 </Project>

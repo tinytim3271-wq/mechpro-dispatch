@@ -247,12 +247,24 @@ export class ApiStack extends Stack {
       resource.retentionInDays = logs.RetentionDays.ONE_MONTH;
     }
     const aggregateFunctions = functions.filter(fn => fn !== onboardingFn && fn !== assistantFn && fn !== agentPhoneWebhookFn && fn !== agentPhoneConfigureFn);
-    const sumMetrics = (metricName: string, metric: (fn: lambda.Function) => cloudwatch.IMetric) =>
-      new cloudwatch.MathExpression({
-        expression: aggregateFunctions.map((_, index) => `${metricName}${index}`).join(' + '),
-        usingMetrics: Object.fromEntries(aggregateFunctions.map((fn, index) => [`${metricName}${index}`, metric(fn)])),
+    const sumMetrics = (metricName: string, metric: (fn: lambda.Function) => cloudwatch.IMetric) => {
+      const chunkSize = 10;
+      const chunks: cloudwatch.IMetric[] = [];
+      for (let offset = 0; offset < aggregateFunctions.length; offset += chunkSize) {
+        const slice = aggregateFunctions.slice(offset, offset + chunkSize);
+        chunks.push(new cloudwatch.MathExpression({
+          expression: slice.map((_, index) => `${metricName}${offset + index}`).join(' + '),
+          usingMetrics: Object.fromEntries(slice.map((fn, index) => [`${metricName}${offset + index}`, metric(fn)])),
+          period: Duration.minutes(1),
+        }));
+      }
+      if (chunks.length === 1) return chunks[0];
+      return new cloudwatch.MathExpression({
+        expression: chunks.map((_, index) => `${metricName}Chunk${index}`).join(' + '),
+        usingMetrics: Object.fromEntries(chunks.map((chunk, index) => [`${metricName}Chunk${index}`, chunk])),
         period: Duration.minutes(1),
       });
+    };
     const invocations = sumMetrics('invocations', fn => fn.metricInvocations({ period: Duration.minutes(1) }));
     const errors = sumMetrics('errors', fn => fn.metricErrors({ period: Duration.minutes(1) }));
     const throttles = sumMetrics('throttles', fn => fn.metricThrottles({ period: Duration.minutes(1) }));

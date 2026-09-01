@@ -7,7 +7,9 @@
   "license": "UNLICENSED",
   "scripts": {
     "desktop": "electron .",
-    "build:windows": "electron-builder --win nsis",
+    "build:j2534": "bash diagnostics/j2534-service/scripts/publish-win-x64.sh",
+    "build:windows": "npm run build:j2534 && electron-builder --win nsis",
+    "build:windows:zip": "npm run build:j2534 && electron-builder --win zip",
     "test:j2534": "node diagnostics/j2534-host-node/test/host.test.js"
   },
   "devDependencies": {
@@ -39,7 +41,16 @@
       {
         "from": "diagnostics/j2534-host-node",
         "to": "j2534-host-node",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "diagnostics/j2534-service/publish/win-x64",
+        "to": "j2534-host",
+        "filter": [
+          "J2534.Host.exe"
+        ]
       }
     ],
     "win": {
@@ -62,5 +73,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1111.0"
+  },
+  "allowScripts": {
+    "electron@38.8.6": true,
+    "electron-winstaller@5.4.0": true
   }
 }
