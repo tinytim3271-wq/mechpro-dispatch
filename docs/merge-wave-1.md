@@ -2,11 +2,11 @@
 
 ## What was merged
 
-- Added `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/contracts/wave1-alignment.ts` to capture Wave 1 contract alignment for legacy `MechPro-aws` entities and target `mechpro-dispatch` entities.
-- Added `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/lambda/common/runtime-env.ts` to preserve current Lambda env names while accepting legacy aliases from `MechPro` / `MechPro-aws`.
-- Updated `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/lambda/entities/handler.ts` so legacy `bookings` requests map onto the target `appointments` entity path and payload shape.
-- Updated `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/lambda/admin/accounts.ts`, `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/lambda/files/presign.ts`, and `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/lambda/ai/agentphone-webhook.ts` to consume env aliases without changing current defaults.
-- Repaired target-repo infra build blockers in `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/package.json`, `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/lib/api-stack.ts`, and `/home/runner/work/mechpro-dispatch/mechpro-dispatch/infra/test/infra.test.ts` so Wave 1 changes can be validated.
+- Added `infra/contracts/wave1-alignment.ts` to capture Wave 1 contract alignment for legacy `MechPro-aws` entities and target `mechpro-dispatch` entities.
+- Added `infra/lambda/common/runtime-env.ts` to preserve current Lambda env names while accepting legacy aliases from `MechPro` / `MechPro-aws`.
+- Updated `infra/lambda/entities/handler.ts` so legacy `bookings` requests map onto the target `appointments` entity path and payload shape.
+- Updated `infra/lambda/admin/accounts.ts`, `infra/lambda/files/presign.ts`, and `infra/lambda/ai/agentphone-webhook.ts` to consume env aliases without changing current defaults.
+- Repaired target-repo infra build blockers in `infra/package.json`, `infra/lib/api-stack.ts`, and `infra/test/infra.test.ts` so Wave 1 changes can be validated.
 
 ## File-level mapping
 
