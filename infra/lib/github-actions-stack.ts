@@ -46,7 +46,7 @@ export class GitHubActionsStack extends Stack {
       resources: [`arn:${this.partition}:cloudfront::${this.account}:distribution/*`],
     }));
     role.addToPolicy(new iam.PolicyStatement({
-      actions: ['cloudformation:DescribeStacks'],
+      actions: ['cloudformation:DescribeStacks', 'cloudformation:DescribeStackResources'],
       resources: [`arn:${this.partition}:cloudformation:${this.region}:${this.account}:stack/MechPro*/*`],
     }));
 

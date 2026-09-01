@@ -81,11 +81,13 @@ jobs:
         run: |
           set -euo pipefail
           TAG="desktop-v1.0.0"
+          REPO="${{ github.repository }}"
           NOTES="Automated Windows build from ${GITHUB_SHA}. Includes J2534 OEM Diagnostics and 64-bit Windows adapter detection (WOW6432Node)."
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/windows/*.exe dist/windows/*.zip --clobber
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/windows/*.exe dist/windows/*.zip --clobber --repo "$REPO"
           else
             gh release create "$TAG" dist/windows/*.exe dist/windows/*.zip \
+              --repo "$REPO" \
               --title "MechPro Desktop 1.0.0" \
               --notes "$NOTES"
           fi
@@ -111,18 +113,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          resolve_output() {
+          stack_output() {
             aws cloudformation describe-stacks \
               --stack-name "$1" \
               --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue | [0]" \
               --output text 2>/dev/null || true
           }
-          BUCKET="$(resolve_output MechProCdnStack SiteBucketName)"
+          stack_bucket() {
+            local stack="$1"
+            local from_output
+            from_output="$(stack_output "$stack" SiteBucketName)"
+            if [[ -n "$from_output" && "$from_output" != "None" ]]; then
+              echo "$from_output"
+              return 0
+            fi
+            aws cloudformation describe-stack-resources \
+              --stack-name "$stack" \
+              --query "StackResources[?ResourceType=='AWS::S3::Bucket'].PhysicalResourceId | [0]" \
+              --output text 2>/dev/null || true
+          }
+          BUCKET=""
+          for attempt in $(seq 1 10); do
+            BUCKET="$(stack_bucket MechProCdnStack)"
+            if [[ -z "$BUCKET" || "$BUCKET" == "None" ]]; then
+              BUCKET="$(stack_bucket MechProStaticSiteStack)"
+            fi
+            if [[ -n "$BUCKET" && "$BUCKET" != "None" ]]; then
+              break
+            fi
+            if [[ "$attempt" -lt 10 ]]; then
+              echo "Could not resolve site bucket (attempt ${attempt}/10); waiting for deploy stack outputs..."
+              sleep 30
+            fi
+          done
           if [[ -z "$BUCKET" || "$BUCKET" == "None" ]]; then
-            BUCKET="$(resolve_output MechProStaticSiteStack SiteBucketName)"
-          fi
-          if [[ -z "$BUCKET" || "$BUCKET" == "None" ]]; then
-            echo "Could not resolve site bucket from CloudFormation outputs." >&2
+            echo "Could not resolve site bucket from CloudFormation stacks." >&2
             exit 1
           fi
           echo "Publishing to s3://$BUCKET/downloads/"
@@ -132,7 +157,13 @@ jobs:
           aws s3 cp dist/windows/MechPro-Setup-1.0.0.zip "s3://$BUCKET/downloads/MechPro-Setup-1.0.0.zip" \
             --content-type application/zip \
             --cache-control "public, max-age=300"
-          DIST_ID="$(resolve_output MechProCdnStack DistributionId)"
+          DIST_ID="$(stack_output MechProCdnStack DistributionId)"
+          if [[ -z "$DIST_ID" || "$DIST_ID" == "None" ]]; then
+            DIST_ID="$(aws cloudformation describe-stack-resources \
+              --stack-name MechProCdnStack \
+              --query "StackResources[?ResourceType=='AWS::CloudFront::Distribution'].PhysicalResourceId | [0]" \
+              --output text 2>/dev/null || true)"
+          fi
           if [[ -n "$DIST_ID" && "$DIST_ID" != "None" ]]; then
             aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/downloads/*"
           fi
