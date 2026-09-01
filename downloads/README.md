@@ -1,6 +1,6 @@
 # MechPro Windows downloads
 
-Installer binaries are **not** committed to git. They are published by GitHub Actions on every push to `main`:
+Installer binaries are **not** committed to git. They are published by GitHub Actions on every push to `main` (workflow: `windows-desktop.yml`):
 
 - `MechPro-Setup-1.0.0.exe` — NSIS installer (built on `windows-latest`)
 - `MechPro-Setup-1.0.0.zip` — portable zip (same build)
@@ -9,6 +9,10 @@ Public URLs (after publish):
 
 - https://www.yourcarguy806.com/downloads/MechPro-Setup-1.0.0.exe
 - https://www.yourcarguy806.com/downloads/MechPro-Setup-1.0.0.zip
+
+GitHub Release (updated on each successful `main` build):
+
+- https://github.com/tinytim3271-wq/mechpro-dispatch/releases/tag/desktop-v1.0.0
 
 Manual publish (requires AWS credentials with access to the site bucket):
 

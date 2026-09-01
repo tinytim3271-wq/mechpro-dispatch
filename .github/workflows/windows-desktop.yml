@@ -8,6 +8,7 @@ on:
       - 'diagnostics/j2534-service/**'
       - 'desktop/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'app.js'
       - 'diagnostics-ui.js'
   push:
@@ -17,6 +18,7 @@ on:
       - 'diagnostics/j2534-service/**'
       - 'desktop/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'app.js'
       - 'diagnostics-ui.js'
 
@@ -53,13 +55,40 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx electron-builder --win nsis zip
+      - name: Build NSIS installer and portable zip
+        run: npx electron-builder --win nsis zip --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: mechpro-windows-installer
           path: |
             dist/windows/*.exe
             dist/windows/*.zip
+
+  publish-github-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-installer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mechpro-windows-installer
+          path: dist/windows
+      - name: Upload installer to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="desktop-v1.0.0"
+          NOTES="Automated Windows build from ${GITHUB_SHA}. Includes J2534 OEM Diagnostics and 64-bit Windows adapter detection (WOW6432Node)."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/windows/*.exe dist/windows/*.zip --clobber
+          else
+            gh release create "$TAG" dist/windows/*.exe dist/windows/*.zip \
+              --title "MechPro Desktop 1.0.0" \
+              --notes "$NOTES"
+          fi
 
   publish-download:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
