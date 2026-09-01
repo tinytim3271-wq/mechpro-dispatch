@@ -15,6 +15,12 @@ public static class AdapterRegistry
         @"SOFTWARE\WOW6432Node\PassThruSupport.04.02",
     ];
 
+    static readonly string[] Registry32Roots =
+    [
+        @"SOFTWARE\PassThruSupport.04.04",
+        @"SOFTWARE\PassThruSupport.04.02",
+    ];
+
     public static object ListAdapters()
     {
         var adapters = EnumerateHardwareAdapters();
@@ -36,12 +42,10 @@ public static class AdapterRegistry
         if (!OperatingSystem.IsWindows()) return adapters;
 
         var seenDlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var root in RegistryRoots)
+        foreach (var (root, key) in OpenRegistryRoots())
         {
             try
             {
-                using var key = Registry.LocalMachine.OpenSubKey(root);
-                if (key is null) continue;
                 foreach (var entry in ReadAdaptersFromKey(key, root))
                 {
                     if (!seenDlls.Add(entry.DllPath)) continue;
@@ -52,9 +56,58 @@ public static class AdapterRegistry
             {
                 // Registry access may fail in restricted environments.
             }
+            finally
+            {
+                key.Dispose();
+            }
         }
 
         return adapters;
+    }
+
+    static IEnumerable<(string Root, RegistryKey Key)> OpenRegistryRoots()
+    {
+        var roots = new List<(string Root, RegistryKey Key)>();
+
+        foreach (var root in RegistryRoots)
+        {
+            RegistryKey? key = null;
+            try
+            {
+                key = Registry.LocalMachine.OpenSubKey(root);
+                if (key is not null) roots.Add((root, key));
+                else key = null;
+            }
+            catch
+            {
+                key?.Dispose();
+            }
+        }
+
+        try
+        {
+            using var base32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
+            foreach (var root in Registry32Roots)
+            {
+                RegistryKey? key = null;
+                try
+                {
+                    key = base32.OpenSubKey(root);
+                    if (key is not null) roots.Add(($"registry32:{root}", key));
+                    else key = null;
+                }
+                catch
+                {
+                    key?.Dispose();
+                }
+            }
+        }
+        catch
+        {
+            // Ignore 32-bit hive access failures.
+        }
+
+        return roots;
     }
 
     static IEnumerable<AdapterInfo> ReadAdaptersFromKey(RegistryKey key, string root)
@@ -62,13 +115,14 @@ public static class AdapterRegistry
         foreach (var subKeyName in key.GetSubKeyNames())
         {
             using var sub = key.OpenSubKey(subKeyName);
-            var dll = sub?.GetValue("FunctionLibrary") as string;
+            var dll = ReadRegistryString(sub, "FunctionLibrary");
             if (string.IsNullOrWhiteSpace(dll)) continue;
+            dll = Environment.ExpandEnvironmentVariables(dll);
 
-            var displayName = sub?.GetValue("Name") as string;
+            var displayName = ReadRegistryString(sub, "Name");
             if (string.IsNullOrWhiteSpace(displayName)) displayName = subKeyName;
 
-            var vendor = sub?.GetValue("Vendor") as string;
+            var vendor = ReadRegistryString(sub, "Vendor");
             if (string.IsNullOrWhiteSpace(vendor))
                 vendor = displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? displayName;
 
@@ -79,9 +133,21 @@ public static class AdapterRegistry
                 Vendor = vendor,
                 DllPath = dll,
                 Protocols = ReadProtocols(sub),
-                Firmware = "unknown",
+                Firmware = ReadRegistryString(sub, "Firmware") ?? "unknown",
             };
         }
+    }
+
+    static string? ReadRegistryString(RegistryKey? key, string name)
+    {
+        if (key is null) return null;
+        var value = key.GetValue(name);
+        return value switch
+        {
+            string s => s.Trim(),
+            string[] arr when arr.Length > 0 => arr[0].Trim(),
+            _ => null,
+        };
     }
 
     static string[] ReadProtocols(RegistryKey? sub)
@@ -110,7 +176,9 @@ public static class AdapterRegistry
 
     static string BuildAdapterId(string root, string subKeyName, string dllPath)
     {
-        var scope = root.Contains("WOW6432Node", StringComparison.OrdinalIgnoreCase) ? "wow64" : "native";
+        var scope = root.Contains("WOW6432Node", StringComparison.OrdinalIgnoreCase) || root.StartsWith("registry32:", StringComparison.Ordinal)
+            ? "wow64"
+            : "native";
         var version = root.Contains("04.02", StringComparison.Ordinal) ? "0402" : "0404";
         var slug = subKeyName.Replace(' ', '-').ToLowerInvariant();
         return $"registry-{scope}-{version}-{slug}";

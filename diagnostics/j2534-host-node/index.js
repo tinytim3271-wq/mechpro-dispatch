@@ -100,6 +100,14 @@ function listAdapters() {
         adapters.push(entry);
       }
     }
+    for (const root of ['HKLM\\SOFTWARE\\PassThruSupport.04.04', 'HKLM\\SOFTWARE\\PassThruSupport.04.02']) {
+      for (const entry of readWindowsRegistryAdapters(root, 32)) {
+        const key = entry.dllPath.toLowerCase();
+        if (seenDlls.has(key)) continue;
+        seenDlls.add(key);
+        adapters.push(entry);
+      }
+    }
   }
   adapters.push({
     id: 'simulator',
@@ -112,10 +120,16 @@ function listAdapters() {
   return { adapters, simulator: adapters.length === 1 };
 }
 
-function readWindowsRegistryAdapters(root) {
+function readWindowsRegistryAdapters(root, view = 64) {
   try {
     const { execSync } = require('node:child_process');
-    const output = execSync(`reg query "${root}" /s 2>nul`, { encoding: 'utf8', timeout: 5000 });
+    const viewFlag = view === 32 ? ' /reg:32' : '';
+    const output = execSync(`reg query "${root}" /s${viewFlag}`, {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
     const entries = [];
     let currentKey = null;
     let currentValues = {};
@@ -137,11 +151,11 @@ function readWindowsRegistryAdapters(root) {
       .filter((entry) => entry.key.startsWith(`${prefix}\\`) && entry.key !== prefix)
       .map((entry) => {
         const subKey = entry.key.slice(prefix.length + 1);
-        const dllPath = entry.values.FunctionLibrary;
+        const dllPath = (entry.values.FunctionLibrary || '').replace(/%([^%]+)%/g, (_, name) => process.env[name] || `%${name}%`);
         if (!dllPath) return null;
         const name = entry.values.Name || subKey;
         const vendor = entry.values.Vendor || name.split(/\s+/)[0] || name;
-        const scope = root.includes('WOW6432Node') ? 'wow64' : 'native';
+        const scope = root.includes('WOW6432Node') || view === 32 ? 'wow64' : 'native';
         const version = root.includes('04.02') ? '0402' : '0404';
         const slug = subKey.replace(/\s+/g, '-').toLowerCase();
         return {
