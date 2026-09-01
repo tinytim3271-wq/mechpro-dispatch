@@ -13,9 +13,10 @@ import { GetCommand, PutCommand, QueryCommand, TransactWriteCommand } from '@aws
 import { randomUUID } from 'node:crypto';
 import { ddb, TABLE_NAME } from '../common/ddb';
 import { AuthError, requestContext, requireRole } from '../common/auth';
+import { userPoolId } from '../common/runtime-env';
 
 const cognito = new CognitoIdentityProviderClient({});
-const USER_POOL_ID = process.env.USER_POOL_ID as string;
+const USER_POOL_ID = userPoolId();
 const PLATFORM_PK = 'PLATFORM';
 
 interface CustomerAccount {

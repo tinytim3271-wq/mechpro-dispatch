@@ -3,6 +3,7 @@ import { GetCommand, PutCommand, DeleteCommand, QueryCommand, BatchWriteCommand 
 import { randomUUID } from 'node:crypto';
 import { ddb, TABLE_NAME } from '../common/ddb';
 import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
+import { normalizeWave1EntityPayload, normalizeWave1EntityType } from '../../contracts/wave1-alignment';
 
 /** Entity types this generic CRUD handler serves. Each maps to a DynamoDB sort-key prefix. */
 const ENTITY_PREFIXES: Record<string, string> = {
@@ -31,7 +32,7 @@ const ENTITY_PREFIXES: Record<string, string> = {
 };
 
 export function entityPrefix(entityType: unknown) {
-  return ENTITY_PREFIXES[String(entityType || '').toLowerCase()];
+  return ENTITY_PREFIXES[String(normalizeWave1EntityType(entityType) || '').toLowerCase()];
 }
 
 const CHAT_TYPES = new Set(['conversations', 'chatmessages']);
@@ -91,7 +92,8 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
   try {
     const ctx = requestContext(event);
     await requireActiveAccount(ctx);
-    const entityType = event.pathParameters?.type;
+    const rawEntityType = event.pathParameters?.type;
+    const entityType = normalizeWave1EntityType(rawEntityType);
     const id = event.pathParameters?.id;
     const prefix = entityPrefix(entityType);
     if (!prefix) return json(404, { message: `Unknown entity type: ${entityType}` });
@@ -127,13 +129,14 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     }
 
     if (method === 'POST') {
-      let body = JSON.parse(event.body || '{}');
+      let body = normalizeWave1EntityPayload(rawEntityType, JSON.parse(event.body || '{}'));
       if (entityType === 'conversations') {
-        if (!['direct', 'group'].includes(body.kind)) return json(400, { message: 'Conversation kind must be direct or group' });
-        if (body.kind === 'group' && ctx.role !== 'admin') return json(403, { message: 'Only owners can create group conversations' });
+        const kind = String(body.kind || '');
+        if (!['direct', 'group'].includes(kind)) return json(400, { message: 'Conversation kind must be direct or group' });
+        if (kind === 'group' && ctx.role !== 'admin') return json(403, { message: 'Only owners can create group conversations' });
         const members = memberEmails(body.memberEmails);
         if (!members.includes(ctx.email) || members.length < 2) return json(400, { message: 'Conversation requires the creator and at least one other member' });
-        body = { ...body, memberEmails: members, creatorEmail: ctx.email };
+        body = { ...body, kind, memberEmails: members, creatorEmail: ctx.email };
       }
       if (entityType === 'chatmessages') {
         if (!body.conversationId || !String(body.body || '').trim()) return json(400, { message: 'Conversation and message body are required' });
@@ -163,7 +166,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     }
 
     if (method === 'PUT' && id) {
-      const body = JSON.parse(event.body || '{}');
+      const body = normalizeWave1EntityPayload(rawEntityType, JSON.parse(event.body || '{}'));
       if (entityType === 'chatmessages') return json(405, { message: 'Chat messages cannot be edited' });
       if (entityType === 'conversations') {
         const existing = await getEntity(pk, prefix, id);

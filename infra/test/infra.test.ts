@@ -7,14 +7,11 @@ import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout
 import { verifyStripeSignature } from '../lambda/payments/webhook';
 import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
 import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
-import { verifyStripeSignature } from '../lambda/payments/webhook';
-import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
-import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
 import { matchCoverageRecord, evaluateEligibility } from '../lambda/diagnostics/coverage';
 import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/start';
 import { createHmac } from 'node:crypto';
-import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/start';
-import { createHmac } from 'node:crypto';
+import { appUrl, envValue, filesBucketName, userPoolId } from '../lambda/common/runtime-env';
+import { normalizeWave1EntityPayload, normalizeWave1EntityType } from '../contracts/wave1-alignment';
 
 describe('desktop subscription entitlement', () => {
 	test('allows active and trial subscriptions that have not expired', () => {
@@ -71,6 +68,7 @@ describe('super admin account controls', () => {
 
 describe('shop entity controls', () => {
 	test('supports all linked shop-management records and rejects unknown types', () => {
+		expect(entityPrefix('bookings')).toBe('APPOINTMENT');
 		expect(entityPrefix('inventory')).toBe('INVENTORY');
 		expect(entityPrefix('inspectionTemplates')).toBe('INSPECTIONTEMPLATE');
 		expect(entityPrefix('inspections')).toBe('INSPECTION');
@@ -94,6 +92,71 @@ describe('shop entity controls', () => {
 			{ sk: 'PAYMENT#payment-1', invoiceNumber: 'INV-1' },
 		])).toBeNull();
 		expect(deletionConflict('invoices', { number: 'INV-1' }, [])).toBeNull();
+	});
+});
+
+describe('Wave 1 source compatibility', () => {
+	test('normalizes MechPro-AWS bookings into dispatch appointments', () => {
+		expect(normalizeWave1EntityType('bookings')).toBe('appointments');
+		expect(normalizeWave1EntityPayload('bookings', {
+			id: 42,
+			customer_id: 7,
+			employee_id: 9,
+			booking_date: '2026-08-17T14:30:00Z',
+			service_type: 'Brake inspection',
+			status: 'scheduled',
+		})).toMatchObject({
+			customerId: 7,
+			employeeId: 9,
+			customer: 'Customer #7',
+			vehicle: 'Vehicle pending',
+			service: 'Brake inspection',
+			date: '2026-08-17',
+			time: '14:30',
+			tech: 'Employee #9',
+			status: 'scheduled',
+			sourceContract: 'MechPro-aws.bookings',
+		});
+	});
+
+	test('maps legacy invoice and customer fields without overwriting current names', () => {
+		expect(normalizeWave1EntityPayload('invoices', {
+			customer_id: 11,
+			total_amount: 250.75,
+			payment_method: 'card',
+		})).toMatchObject({
+			customerId: 11,
+			customer: 'Customer #11',
+			amount: 250.75,
+			paymentMethod: 'card',
+			sourceContract: 'MechPro-aws.invoices',
+		});
+		expect(normalizeWave1EntityPayload('customers', {
+			name: 'Alex Owner',
+			address: '123 Main St',
+		})).toMatchObject({
+			billingAddress: '123 Main St',
+			sourceContract: 'MechPro-aws.customers',
+		});
+		expect(normalizeWave1EntityPayload('customers', {
+			name: 'Already current',
+			billingAddress: '456 Oak Ave',
+		})).toEqual({
+			name: 'Already current',
+			billingAddress: '456 Oak Ave',
+		});
+	});
+});
+
+describe('runtime env aliases', () => {
+	test('prefers dispatch env names and falls back to MechPro aliases', () => {
+		expect(envValue(['USER_POOL_ID', 'COGNITO_USER_POOL_ID'], {
+			USER_POOL_ID: 'dispatch-pool',
+			COGNITO_USER_POOL_ID: 'legacy-pool',
+		})).toBe('dispatch-pool');
+		expect(userPoolId({ COGNITO_USER_POOL_ID: 'legacy-pool' })).toBe('legacy-pool');
+		expect(filesBucketName({ S3_BUCKET: 'legacy-bucket' })).toBe('legacy-bucket');
+		expect(appUrl({ FRONTEND_URL: 'https://legacy.example.com' })).toBe('https://legacy.example.com');
 	});
 });
 
