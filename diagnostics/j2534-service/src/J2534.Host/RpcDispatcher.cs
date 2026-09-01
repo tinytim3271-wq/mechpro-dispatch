@@ -37,7 +37,7 @@ public static class RpcDispatcher
     static ConnectParams ParseConnect(JsonElement? element)
     {
         if (element is null) return new ConnectParams();
-        return JsonSerializer.Deserialize<ConnectParams>(element.Value.GetRawText()) ?? new ConnectParams();
+        return JsonSerializer.Deserialize<ConnectParams>(element.Value.GetRawText(), JsonOptions.Rpc) ?? new ConnectParams();
     }
 
     static long ParseSince(JsonElement? element)

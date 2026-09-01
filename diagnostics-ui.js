@@ -109,7 +109,18 @@ function matchCoverage(bundle, vehicle) {
   }) || records.find((record) => record.platform === platform);
 }
 
-function formatCommEntry(entry) {
+function normalizeOemAdapter(adapter) {
+  if (!adapter) return null;
+  return {
+    id: adapter.id ?? adapter.Id ?? '',
+    name: adapter.name ?? adapter.Name ?? 'Unknown adapter',
+    vendor: adapter.vendor ?? adapter.Vendor ?? '',
+    dllPath: adapter.dllPath ?? adapter.DllPath ?? '',
+    protocols: adapter.protocols ?? adapter.Protocols ?? [],
+    firmware: adapter.firmware ?? adapter.Firmware ?? '',
+  };
+}
+
   const time = new Date(entry.timestamp).toLocaleTimeString();
   const dir = entry.direction === 'tx' ? 'TX' : 'RX';
   return `[${time}] ${dir} ${entry.address} ${entry.data} — ${entry.description}`;
@@ -130,8 +141,9 @@ function oemDiagnosticsView() {
       </section>`);
   }
 
-  const hardwareAdapters = (diag.adapters || []).filter((a) => a.id !== 'simulator');
-  const adapters = (diag.adapters || []).map((a) => `<option value="${escapeHtml(a.id)}" ${diag.selectedAdapter === a.id ? 'selected' : ''}>${escapeHtml(a.name)} (${escapeHtml(a.vendor)})</option>`).join('');
+  const adaptersList = (diag.adapters || []).map(normalizeOemAdapter).filter(Boolean);
+  const hardwareAdapters = adaptersList.filter((a) => a.id !== 'simulator');
+  const adapters = adaptersList.map((a) => `<option value="${escapeHtml(a.id)}" ${diag.selectedAdapter === a.id ? 'selected' : ''}>${escapeHtml(a.name)} (${escapeHtml(a.vendor)})</option>`).join('');
   const adapterHelp = hardwareAdapters.length
     ? ''
     : `<div class="ledger-note">${icon('info', 15)} No J2534 hardware detected. Install your adapter vendor software (for TOPDON RLink X7: RLink Platform → Drivers → download the J2534 driver), plug in USB, then click Refresh. MechPro scans both 64-bit and 32-bit Windows J2534 registry entries.</div>`;
@@ -200,9 +212,11 @@ function oemDiagnosticsView() {
 async function refreshOemAdapters() {
   const api = oemDiagApi();
   const result = await api.listAdapters();
+  const adapters = (result.adapters || []).map(normalizeOemAdapter).filter(Boolean);
+  const hardware = adapters.filter((a) => a.id !== 'simulator');
   saveOemDiagState({
-    adapters: result.adapters || [],
-    selectedAdapter: result.adapters?.[0]?.id || 'simulator',
+    adapters,
+    selectedAdapter: hardware[0]?.id || adapters[0]?.id || 'simulator',
     lastError: null,
   });
 }
