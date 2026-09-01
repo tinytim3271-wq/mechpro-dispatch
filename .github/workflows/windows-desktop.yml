@@ -2,6 +2,13 @@ name: Windows desktop release
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'diagnostics/j2534-service/**'
+      - 'desktop/**'
+      - 'package.json'
+      - 'app.js'
+      - 'diagnostics-ui.js'
   push:
     branches: [main]
     paths:
@@ -44,8 +51,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run build:windows
+      - run: npx electron-builder --win nsis zip
       - uses: actions/upload-artifact@v4
         with:
           name: mechpro-windows-installer
-          path: dist/windows/*.exe
+          path: |
+            dist/windows/*.exe
+            dist/windows/*.zip

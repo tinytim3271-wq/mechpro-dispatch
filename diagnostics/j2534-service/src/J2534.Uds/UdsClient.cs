@@ -35,12 +35,12 @@ public sealed class UdsClient
         var part = ReadDataById([0x22, 0xF1, 0x8A], txId, rxId);
         var sw = ReadDataById([0x22, 0xF1, 0x89], txId, rxId);
         var cal = ReadDataById([0x22, 0xF1, 0x8C], txId, rxId);
-        return new EcuIdentification
+        return Task.FromResult(new EcuIdentification
         {
             PartNumber = part,
             SoftwareVersion = sw,
             CalibrationId = cal,
-        };
+        });
     }
 
     public Task<object[]> ReadDtcsAsync(string txId, string rxId)
