@@ -289,6 +289,7 @@ export class ApiStack extends Stack {
           datapointsToAlarm: 2,
           comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
           treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+          ...(offset === 0 && aggregateFunctions.length <= chunkSize ? { alarmName } : {}),
         }));
       }
       if (chunkAlarms.length === 1) return chunkAlarms[0];
