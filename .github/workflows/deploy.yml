@@ -53,4 +53,4 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: us-east-1
-      - run: npx cdk deploy --all --require-approval never --strict -c enableCustomDomain=true
+      - run: npx cdk deploy --all --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}
