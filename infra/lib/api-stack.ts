@@ -267,26 +267,46 @@ export class ApiStack extends Stack {
     };
     const invocations = sumMetrics('invocations', fn => fn.metricInvocations({ period: Duration.minutes(1) }));
     const errors = sumMetrics('errors', fn => fn.metricErrors({ period: Duration.minutes(1) }));
-    const throttles = sumMetrics('throttles', fn => fn.metricThrottles({ period: Duration.minutes(1) }));
 
-    const lambdaErrorAlarm = new cloudwatch.Alarm(this, 'LambdaErrorAlarm', {
-      alarmName: 'MechPro-Api-Lambda-Errors',
-      metric: errors,
-      threshold: 1,
-      evaluationPeriods: 3,
-      datapointsToAlarm: 2,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
-    const lambdaThrottleAlarm = new cloudwatch.Alarm(this, 'LambdaThrottleAlarm', {
-      alarmName: 'MechPro-Api-Lambda-Throttles',
-      metric: throttles,
-      threshold: 1,
-      evaluationPeriods: 3,
-      datapointsToAlarm: 2,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
+    const makeChunkedAlarm = (
+      id: string,
+      alarmName: string,
+      metric: (fn: lambda.Function) => cloudwatch.IMetric,
+    ): cloudwatch.IAlarm => {
+      const chunkSize = 10;
+      const chunkAlarms: cloudwatch.Alarm[] = [];
+      for (let offset = 0; offset < aggregateFunctions.length; offset += chunkSize) {
+        const slice = aggregateFunctions.slice(offset, offset + chunkSize);
+        const expr = new cloudwatch.MathExpression({
+          expression: slice.map((_, i) => `m${offset + i}`).join(' + '),
+          usingMetrics: Object.fromEntries(slice.map((fn, i) => [`m${offset + i}`, metric(fn)])),
+          period: Duration.minutes(1),
+        });
+        chunkAlarms.push(new cloudwatch.Alarm(this, `${id}Chunk${offset}`, {
+          metric: expr,
+          threshold: 1,
+          evaluationPeriods: 3,
+          datapointsToAlarm: 2,
+          comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+          treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+        }));
+      }
+      if (chunkAlarms.length === 1) return chunkAlarms[0];
+      return new cloudwatch.CompositeAlarm(this, id, {
+        compositeAlarmName: alarmName,
+        alarmRule: cloudwatch.AlarmRule.anyOf(...chunkAlarms),
+      });
+    };
+    const lambdaErrorAlarm = makeChunkedAlarm(
+      'LambdaErrorAlarm',
+      'MechPro-Api-Lambda-Errors',
+      fn => fn.metricErrors({ period: Duration.minutes(1) }),
+    );
+    const lambdaThrottleAlarm = makeChunkedAlarm(
+      'LambdaThrottleAlarm',
+      'MechPro-Api-Lambda-Throttles',
+      fn => fn.metricThrottles({ period: Duration.minutes(1) }),
+    );
     const api5xxAlarm = new cloudwatch.Alarm(this, 'Api5xxAlarm', {
       alarmName: 'MechPro-Api-5xx-Errors',
       metric: this.httpApi.metricServerError({ period: Duration.minutes(1) }),
