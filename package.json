@@ -9,6 +9,7 @@
     "desktop": "electron .",
     "build:j2534": "bash diagnostics/j2534-service/scripts/publish-win-x64.sh",
     "build:windows": "npm run build:j2534 && electron-builder --win nsis",
+    "build:windows:zip": "npm run build:j2534 && electron-builder --win zip",
     "test:j2534": "node diagnostics/j2534-host-node/test/host.test.js"
   },
   "devDependencies": {
