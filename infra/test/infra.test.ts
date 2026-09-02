@@ -12,8 +12,11 @@ import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/sta
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import * as cdk from 'aws-cdk-lib';
+import { Match, Template } from 'aws-cdk-lib/assertions';
 import { appUrl, envValue, filesBucketName, userPoolId } from '../lambda/common/runtime-env';
 import { normalizeWave1EntityPayload, normalizeWave1EntityType } from '../contracts/wave1-alignment';
+import { GitHubActionsStack } from '../lib/github-actions-stack';
 
 describe('desktop subscription entitlement', () => {
 	test('allows active and trial subscriptions that have not expired', () => {
@@ -165,9 +168,41 @@ describe('runtime env aliases', () => {
 });
 
 describe('deployment workflow', () => {
-	test('uses the production environment before assuming the AWS deploy role', () => {
+	test('assumes the AWS deploy role directly from the main branch ref subject', () => {
 		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy.yml'), 'utf8');
-		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
+		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
+		expect(workflow).not.toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
+		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
+	});
+
+	test('keeps the Windows download publish job on the main-branch ref subject too', () => {
+		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'windows-desktop.yml'), 'utf8');
+		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
+		expect(workflow).not.toMatch(/publish-download:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
+		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
+	});
+
+	test('keeps the GitHub Actions deploy role trust aligned to main pushes', () => {
+		const app = new cdk.App();
+		const stack = new GitHubActionsStack(app, 'TestGitHubActionsStack', {
+			repository: 'tinytim3271-wq/mechpro-dispatch',
+			env: { account: '001018341557', region: 'us-east-1' },
+		});
+		const template = Template.fromStack(stack);
+		template.hasResourceProperties('AWS::IAM::Role', {
+			AssumeRolePolicyDocument: {
+				Statement: Match.arrayWith([
+					Match.objectLike({
+						Action: 'sts:AssumeRoleWithWebIdentity',
+						Condition: {
+							StringLike: {
+								'token.actions.githubusercontent.com:sub': 'repo:tinytim3271-wq/mechpro-dispatch:ref:refs/heads/main',
+							},
+						},
+					}),
+				]),
+			},
+		});
 	});
 });
 
