@@ -17,10 +17,13 @@ export interface CdnStackProps extends StackProps {
 }
 
 export class CdnStack extends Stack {
+  readonly siteBucket: s3.Bucket;
+  readonly distribution: cloudfront.Distribution;
+
   constructor(scope: Construct, id: string, props: CdnStackProps) {
     super(scope, id, props);
 
-    const siteBucket = new s3.Bucket(this, 'MechProSiteBucket', {
+    this.siteBucket = new s3.Bucket(this, 'MechProSiteBucket', {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
@@ -39,9 +42,9 @@ export class CdnStack extends Stack {
       });
     }
 
-    const distribution = new cloudfront.Distribution(this, 'MechProDistribution', {
+    this.distribution = new cloudfront.Distribution(this, 'MechProDistribution', {
       defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
+        origin: origins.S3BucketOrigin.withOriginAccessControl(this.siteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS,
@@ -61,20 +64,36 @@ export class CdnStack extends Stack {
       new route53.ARecord(this, 'SiteAliasRecord', {
         zone: hostedZone,
         recordName: props.domainName,
-        target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution)),
+        target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(this.distribution)),
       });
     }
 
     new s3deploy.BucketDeployment(this, 'DeploySite', {
       sources: [s3deploy.Source.asset(path.join(__dirname, '..', '..'), {
-        exclude: ['infra/**', 'node_modules/**', '.git/**'],
+        exclude: [
+          'infra/**',
+          'desktop/**',
+          'dist/**',
+          'downloads/**',
+          'node_modules/**',
+          'package.json',
+          'package-lock.json',
+          'docs/**',
+          '.git/**',
+          '.github/**',
+          '.vscode/**',
+        ],
       })],
-      destinationBucket: siteBucket,
-      distribution,
+      destinationBucket: this.siteBucket,
+      distribution: this.distribution,
       distributionPaths: ['/*'],
+      // Windows installer is published separately by CI into downloads/.
+      exclude: ['downloads/*'],
     });
 
-    new CfnOutput(this, 'DistributionDomainName', { value: distribution.distributionDomainName });
-    new CfnOutput(this, 'SiteUrl', { value: hasCustomDomain ? `https://${props.domainName}` : `https://${distribution.distributionDomainName}` });
+    new CfnOutput(this, 'DistributionDomainName', { value: this.distribution.distributionDomainName });
+    new CfnOutput(this, 'DistributionId', { value: this.distribution.distributionId });
+    new CfnOutput(this, 'SiteUrl', { value: hasCustomDomain ? `https://${props.domainName}` : `https://${this.distribution.distributionDomainName}` });
+    new CfnOutput(this, 'SiteBucketName', { value: this.siteBucket.bucketName });
   }
 }

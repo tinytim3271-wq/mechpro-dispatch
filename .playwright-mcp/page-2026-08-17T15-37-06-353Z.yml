@@ -1,0 +1,21 @@
+- main [ref=f2e3]:
+  - generic [ref=f2e4]:
+    - generic [ref=f2e9]:
+      - generic [ref=f2e10]: MechPro
+      - generic [ref=f2e11]: Dispatch & work orders
+    - generic [ref=f2e12]: Secure team access
+    - heading "Sign in to your workspace" [level=1] [ref=f2e13]
+    - paragraph [ref=f2e14]: Use the employee login created by your Administrator.
+    - generic [ref=f2e15]:
+      - generic [ref=f2e16]:
+        - text: Email
+        - textbox "Email" [ref=f2e17]:
+          - /placeholder: you@yourcarguy.com
+      - generic [ref=f2e18]:
+        - text: Password
+        - textbox "Password" [ref=f2e19]
+      - button "Sign in" [ref=f2e20] [cursor=pointer]
+    - button "Forgot password?" [ref=f2e24] [cursor=pointer]
+    - generic [ref=f2e25]:
+      - strong [ref=f2e26]: Cognito-backed account
+      - generic [ref=f2e27]: Contact your Administrator if you need access.

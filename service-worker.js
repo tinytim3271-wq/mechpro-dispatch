@@ -1,9 +1,11 @@
-const CACHE_NAME = 'mechpro-shell-v4';
+const CACHE_NAME = 'mechpro-shell-v15';
 const SHELL_FILES = [
   './',
   './index.html',
-  './app.js',
-  './styles.css',
+  './app.js?v=15',
+  './diagnostics-ui.js?v=1',
+  './styles.css?v=15',
+  './theme.css?v=15',
   './manifest.webmanifest',
   './mechpro-icon.svg',
   './assets/vendor/lucide.min.js',
@@ -20,9 +22,8 @@ const SHELL_FILES = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_FILES)).then(() => self.skipWaiting())
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_FILES)));
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
@@ -50,6 +51,21 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(() => caches.match('./index.html')),
+    );
+    return;
+  }
+
+  if (['script', 'style'].includes(request.destination)) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request)),
     );
     return;
   }

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import { DataStack } from '../lib/data-stack';
 import { AuthStack } from '../lib/auth-stack';
 import { ApiStack } from '../lib/api-stack';
 import { StaticSiteStack } from '../lib/static-site-stack';
+import { CdnStack } from '../lib/cdn-stack';
 import { GitHubActionsStack } from '../lib/github-actions-stack';
 
 const app = new cdk.App();
@@ -22,14 +24,21 @@ new ApiStack(app, 'MechProApiStack', {
   userPoolClient: authStack.userPoolClient,
 });
 
-// Interim static hosting until the AWS account is verified for CloudFront (see MechProWafStack/MechProCdnStack, kept but not deployed).
-new StaticSiteStack(app, 'MechProStaticSiteStack', { env });
+// Keep the interim bucket active until AWS verifies CloudFront access for this account.
+const staticSiteStack = new StaticSiteStack(app, 'MechProStaticSiteStack', { env });
+let cdnStack: CdnStack | undefined;
+if (app.node.tryGetContext('enableCustomDomain') === true) {
+  cdnStack = new CdnStack(app, 'MechProCdnStack', { env, domainName: 'www.yourcarguy806.com' });
+}
 
 const githubRepository = app.node.tryGetContext('githubRepository');
 if (githubRepository) {
+  const publishBuckets: s3.IBucket[] = [staticSiteStack.siteBucket];
+  if (cdnStack) publishBuckets.push(cdnStack.siteBucket);
   new GitHubActionsStack(app, 'MechProGitHubActionsStack', {
     env,
     repository: githubRepository,
     subject: app.node.tryGetContext('githubSubject'),
+    siteBuckets: publishBuckets,
   });
 }
