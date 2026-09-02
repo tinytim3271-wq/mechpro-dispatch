@@ -204,6 +204,19 @@ describe('deployment workflow', () => {
 			},
 		});
 	});
+
+	test('uses the configured OIDC subject in the deploy role description', () => {
+		const app = new cdk.App();
+		const stack = new GitHubActionsStack(app, 'TestGitHubActionsStackCustomSubject', {
+			repository: 'tinytim3271-wq/mechpro-dispatch',
+			subject: 'repo:tinytim3271-wq/mechpro-dispatch:ref:refs/heads/main',
+			env: { account: '001018341557', region: 'us-east-1' },
+		});
+		const template = Template.fromStack(stack);
+		template.hasResourceProperties('AWS::IAM::Role', {
+			Description: 'CDK deployment role for tinytim3271-wq/mechpro-dispatch (repo:tinytim3271-wq/mechpro-dispatch:ref:refs/heads/main)',
+		});
+	});
 });
 
 describe('onboarding sample cleanup', () => {
