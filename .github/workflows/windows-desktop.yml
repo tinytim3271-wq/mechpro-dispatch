@@ -97,6 +97,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build-installer
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
       id-token: write
