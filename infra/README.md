@@ -11,17 +11,13 @@ TypeScript CDK app for DynamoDB, Cognito, API Gateway, Lambda, S3, CloudFront, a
 * `npx cdk diff`    compare deployed stack with current state
 * `npx cdk synth`   emits the synthesized CloudFormation template
 
-## GitHub Actions OIDC bootstrap
+## GitHub Actions OIDC trust
 
-CI assumes `MechProGitHubActionsDeployRole` via OIDC from jobs that target the GitHub Actions `production` environment. If `deploy` or `publish-download` fails with `Could not assume role with OIDC`, the live IAM trust policy is out of sync with the `repo:OWNER/REPO:environment:production` token subject those jobs emit.
+`MechProGitHubActionsDeployRole` trusts two GitHub OIDC `sub` claims:
 
-Run once with admin AWS credentials (local profile or CloudShell), then re-run the failed workflows:
+- `repo:OWNER/REPO:ref:refs/heads/main` for the main-branch `deploy` job in `.github/workflows/deploy.yml`
+- `repo:OWNER/REPO:environment:production` for environment-gated publish jobs (for example `publish-download` in `.github/workflows/windows-desktop.yml`)
 
-```bash
-chmod +x infra/scripts/bootstrap-github-oidc-trust.sh
-GITHUB_REPOSITORY=tinytim3271-wq/mechpro-dispatch ./infra/scripts/bootstrap-github-oidc-trust.sh
-```
-
-This temporarily widens trust to `repo:OWNER/REPO:*` so the next successful `cdk deploy` can reconcile the role back to the production-environment subject in `infra/lib/github-actions-stack.ts`.
+This dual-subject trust avoids deployment lockouts when one workflow uses branch-ref tokens while another uses environment tokens.
 
 Optional repository variable `SITE_BUCKET_NAME` skips CloudFormation bucket lookup in the Windows `publish-download` job.
