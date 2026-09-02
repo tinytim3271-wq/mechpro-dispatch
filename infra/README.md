@@ -21,3 +21,17 @@ TypeScript CDK app for DynamoDB, Cognito, API Gateway, Lambda, S3, CloudFront, a
 This dual-subject trust avoids deployment lockouts when one workflow uses branch-ref tokens while another uses environment tokens.
 
 Optional repository variable `SITE_BUCKET_NAME` skips CloudFormation bucket lookup in the Windows `publish-download` job.
+
+## Fixing a broken OIDC trust policy
+
+When GitHub Actions logs `Could not assume role with OIDC`, run the bootstrap
+script once with admin credentials (not the GitHub OIDC role):
+
+```bash
+GITHUB_REPOSITORY=OWNER/REPO ./infra/scripts/bootstrap-github-oidc-trust.sh
+```
+
+This sets `StringLike` on `token.actions.githubusercontent.com:sub` to
+`repo:OWNER/REPO:*`, which unblocks deploy while you reconcile the CDK stack.
+After a successful `MechProGitHubActionsStack` deploy, the trust policy is
+narrowed to branch-ref and production-environment subjects.

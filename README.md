@@ -198,12 +198,15 @@ gracefully offline if AWS is not configured.
 cd infra
 npm ci
 npm run build          # TypeScript compile
-npm test               # Jest unit tests (24 tests)
+npm test               # Jest unit tests (28 tests)
 npx cdk synth --all    # Synthesize CloudFormation templates
 npx cdk deploy --all   # Deploy (requires AWS credentials)
 ```
 
-CDK stacks: `ApiStack`, `AuthStack`, `StorageStack`, `AiStack`, `MonitoringStack`.
+CDK stacks: `MechProDataStack`, `MechProAuthStack`, `MechProApiStack`,
+`MechProStaticSiteStack`, `MechProCdnStack` (when `enableCustomDomain=true`),
+`MechProGitHubActionsStack` (when `githubRepository` context is set). Monitoring
+alarms live inside `MechProApiStack`.
 
 ---
 
@@ -269,6 +272,31 @@ See [`BUILD_ANDROID.md`](BUILD_ANDROID.md) for APK build details.
 
 ---
 
+## Deployment troubleshooting
+
+### GitHub Actions OIDC (`sts:AssumeRoleWithWebIdentity` denied)
+
+If `deploy` or `publish-download` fails with **Not authorized to perform
+sts:AssumeRoleWithWebIdentity**, the IAM role trust policy does not match this
+repository. Re-deploy the GitHub Actions stack or widen trust with admin AWS
+credentials:
+
+```bash
+GITHUB_REPOSITORY=OWNER/REPO ./infra/scripts/bootstrap-github-oidc-trust.sh
+```
+
+Or redeploy from `infra/`:
+
+```bash
+npx cdk deploy MechProGitHubActionsStack --require-approval never \
+  -c githubRepository=OWNER/REPO
+```
+
+The role trusts `repo:OWNER/REPO:ref:refs/heads/main` and
+`repo:OWNER/REPO:environment:production`. See `infra/README.md` for details.
+
+---
+
 ## Development Notes
 
 - **Static runtime, optional source build** — serving the repo root still works
@@ -291,13 +319,13 @@ See [`BUILD_ANDROID.md`](BUILD_ANDROID.md) for APK build details.
 
 ```bash
 bash -lc 'cd infra && npm test'
-# 24 tests, ~0.5 s
+# 28 tests, ~2 s
 ```
 
 ### Voice service (Python/unittest)
 
 ```bash
-python3 diagnostics/voice-service/tests/test_voice_service.py
+python3 -m unittest discover -s diagnostics/voice-service/tests -v
 # 20 tests, ~0.002 s
 ```
 
