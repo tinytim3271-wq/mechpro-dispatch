@@ -12,10 +12,10 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
 
 /** Verifies Stripe's `Stripe-Signature` header per Stripe's documented HMAC-SHA256 scheme. */
 export function verifyStripeSignature(payload: string, signatureHeader: string, webhookSecret: string, nowSeconds = Date.now() / 1000): boolean {
-  const parts = signatureHeader.split(',').map(part => part.split('=', 2) as [string, string]);
-  const timestamp = parts.find(([key]) => key === 't')?.[1];
-  const providedSignatures = parts.filter(([key]) => key === 'v1').map(([, value]) => value);
-  if (!timestamp || !providedSignatures.length || Math.abs(nowSeconds - Number(timestamp)) > 300) return false;
+  const parts = signatureHeader.split(',').map(part => part.trim().split('=', 2) as [string, string]);
+  const timestamp = parts.find(([key]) => key.trim() === 't')?.[1]?.trim();
+  const providedSignatures = parts.filter(([key]) => key.trim() === 'v1').map(([, value]) => value.trim());
+  if (!timestamp || !/^\d+$/.test(timestamp) || !providedSignatures.length || Math.abs(nowSeconds - Number(timestamp)) > 300) return false;
   const signedPayload = `${timestamp}.${payload}`;
   const expected = createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
   const expectedBuf = Buffer.from(expected, 'hex');
@@ -60,16 +60,22 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
         Key: { pk, sk: `INVOICE#${invoiceNumber}` },
       }));
       if (!invoiceResult.Item) return json(400, { message: 'Invoice not found' });
-      const paymentsResult = await ddb.send(new QueryCommand({
-        TableName: TABLE_NAME,
-        KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
-        ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#' },
-        ProjectionExpression: 'invoiceNumber, amount, #status',
-        ExpressionAttributeNames: { '#status': 'status' },
-      }));
-      const alreadyPaid = (paymentsResult.Items ?? [])
-        .filter(payment => payment.invoiceNumber === invoiceNumber && payment.status === 'completed')
-        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      let alreadyPaid = 0;
+      let lastKey: Record<string, unknown> | undefined;
+      do {
+        const paymentsResult = await ddb.send(new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
+          ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#' },
+          ProjectionExpression: 'invoiceNumber, amount, #status',
+          ExpressionAttributeNames: { '#status': 'status' },
+          ExclusiveStartKey: lastKey,
+        }));
+        alreadyPaid += (paymentsResult.Items ?? [])
+          .filter(payment => payment.invoiceNumber === invoiceNumber && payment.status === 'completed')
+          .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        lastKey = paymentsResult.LastEvaluatedKey as Record<string, unknown> | undefined;
+      } while (lastKey);
       const amount = Number(session.amount_total || 0) / 100;
       const balance = Math.max(0, Math.round((Number(invoiceResult.Item.amount || 0) - alreadyPaid) * 100) / 100);
       if (amount <= 0 || amount > balance) return json(400, { message: 'Payment amount exceeds the invoice balance' });

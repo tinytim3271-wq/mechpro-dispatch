@@ -81,13 +81,15 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       : records;
 
     for (let index = 0; index < recordsToDelete.length; index += 25) {
-      await ddb.send(new BatchWriteCommand({
-        RequestItems: {
-          [TABLE_NAME]: recordsToDelete.slice(index, index + 25).map(item => ({
-            DeleteRequest: { Key: { pk: item.pk, sk: item.sk } },
-          })),
-        },
-      }));
+      let requestItems: Record<string, unknown[]> = {
+        [TABLE_NAME]: recordsToDelete.slice(index, index + 25).map(item => ({
+          DeleteRequest: { Key: { pk: item.pk, sk: item.sk } },
+        })),
+      };
+      do {
+        const result = await ddb.send(new BatchWriteCommand({ RequestItems: requestItems }));
+        requestItems = (result.UnprocessedItems ?? {}) as Record<string, unknown[]>;
+      } while (Object.keys(requestItems).length > 0);
     }
 
     const startedAt = new Date().toISOString();
