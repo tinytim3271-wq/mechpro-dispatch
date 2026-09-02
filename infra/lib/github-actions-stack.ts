@@ -21,7 +21,7 @@ export class GitHubActionsStack extends Stack {
       url: 'https://token.actions.githubusercontent.com',
       clientIds: ['sts.amazonaws.com'],
     });
-    const subjectPattern = props.subject ?? `repo:${props.repository}:*`;
+    const subjectPattern = props.subject ?? `repo:${props.repository}:ref:refs/heads/main`;
     const principal = new iam.OpenIdConnectPrincipal(provider).withConditions({
       StringEquals: {
         'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
