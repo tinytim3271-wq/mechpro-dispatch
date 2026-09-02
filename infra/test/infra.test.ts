@@ -10,6 +10,8 @@ import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
 import { matchCoverageRecord, evaluateEligibility } from '../lambda/diagnostics/coverage';
 import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/start';
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { appUrl, envValue, filesBucketName, userPoolId } from '../lambda/common/runtime-env';
 import { normalizeWave1EntityPayload, normalizeWave1EntityType } from '../contracts/wave1-alignment';
 
@@ -159,6 +161,13 @@ describe('runtime env aliases', () => {
 		expect(userPoolId({ COGNITO_USER_POOL_ID: 'legacy-pool' })).toBe('legacy-pool');
 		expect(filesBucketName({ S3_BUCKET: 'legacy-bucket' })).toBe('legacy-bucket');
 		expect(appUrl({ FRONTEND_URL: 'https://legacy.example.com' })).toBe('https://legacy.example.com');
+	});
+});
+
+describe('deployment workflow', () => {
+	test('uses the production environment before assuming the AWS deploy role', () => {
+		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy.yml'), 'utf8');
+		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 	});
 });
 
