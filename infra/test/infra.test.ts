@@ -168,10 +168,9 @@ describe('runtime env aliases', () => {
 });
 
 describe('deployment workflow', () => {
-	test('uses the production environment before assuming the AWS deploy role', () => {
+	test('assumes the AWS deploy role from the main-branch deploy job', () => {
 		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy.yml'), 'utf8');
 		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
-		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
@@ -182,7 +181,7 @@ describe('deployment workflow', () => {
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
-	test('keeps the GitHub Actions deploy role trust aligned to production environment jobs', () => {
+	test('keeps the GitHub Actions deploy role trust aligned to deploy and publish subjects', () => {
 		const app = new cdk.App();
 		const stack = new GitHubActionsStack(app, 'TestGitHubActionsStack', {
 			repository: 'tinytim3271-wq/mechpro-dispatch',
@@ -196,7 +195,10 @@ describe('deployment workflow', () => {
 						Action: 'sts:AssumeRoleWithWebIdentity',
 						Condition: {
 							StringLike: {
-								'token.actions.githubusercontent.com:sub': 'repo:tinytim3271-wq/mechpro-dispatch:environment:production',
+								'token.actions.githubusercontent.com:sub': Match.arrayWith([
+									'repo:tinytim3271-wq/mechpro-dispatch:ref:refs/heads/main',
+									'repo:tinytim3271-wq/mechpro-dispatch:environment:production',
+								]),
 							},
 						},
 					}),

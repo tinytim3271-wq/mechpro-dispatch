@@ -21,19 +21,24 @@ export class GitHubActionsStack extends Stack {
       url: 'https://token.actions.githubusercontent.com',
       clientIds: ['sts.amazonaws.com'],
     });
-    const subjectPattern = props.subject ?? `repo:${props.repository}:environment:production`;
+    const subjectPatterns = props.subject
+      ? [props.subject]
+      : [
+        `repo:${props.repository}:ref:refs/heads/main`,
+        `repo:${props.repository}:environment:production`,
+      ];
     const principal = new iam.OpenIdConnectPrincipal(provider).withConditions({
       StringEquals: {
         'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
       },
       StringLike: {
-        'token.actions.githubusercontent.com:sub': subjectPattern,
+        'token.actions.githubusercontent.com:sub': subjectPatterns.length === 1 ? subjectPatterns[0] : subjectPatterns,
       },
     });
     const role = new iam.Role(this, 'DeployRole', {
       roleName: 'MechProGitHubActionsDeployRole',
       assumedBy: principal,
-      description: `CDK deployment role for ${props.repository} (${subjectPattern})`,
+      description: `CDK deployment role for ${props.repository} (${subjectPatterns.join(', ')})`,
     });
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['sts:AssumeRole'],
