@@ -64,7 +64,7 @@ async function createPaymentLink(shopId: string, invoiceNumber: string) {
   const secret = (await secrets.send(new GetSecretValueCommand({ SecretId: `mechpro/${shopId}/stripe-secret-key` }))).SecretString;
   if (!secret) return { error: 'This shop has not connected online payments yet.' };
   const params = new URLSearchParams({ mode: 'payment', 'line_items[0][price_data][currency]': 'usd', 'line_items[0][price_data][unit_amount]': String(Math.round(balance * 100)), 'line_items[0][price_data][product_data][name]': `MechPro invoice ${invoiceNumber}`, 'line_items[0][quantity]': '1', success_url: `${APP_URL}/#/invoices?payment=success`, cancel_url: `${APP_URL}/#/invoices?payment=cancelled`, 'metadata[shopId]': shopId, 'metadata[invoiceNumber]': invoiceNumber });
-  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() });
+  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(secret + ':').toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString() });
   if (!response.ok) return { error: 'The payment provider could not create a link.' };
   const session = await response.json() as { url?: string };
   return { url: session.url, balance };
