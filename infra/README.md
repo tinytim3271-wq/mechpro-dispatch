@@ -13,7 +13,7 @@ TypeScript CDK app for DynamoDB, Cognito, API Gateway, Lambda, S3, CloudFront, a
 
 ## GitHub Actions OIDC bootstrap
 
-CI assumes `MechProGitHubActionsDeployRole` via OIDC from `main` push jobs. If `deploy` or `publish-download` fails with `Could not assume role with OIDC`, the live IAM trust policy is out of sync with the `repo:OWNER/REPO:ref:refs/heads/main` token subject those jobs emit.
+CI assumes `MechProGitHubActionsDeployRole` via OIDC from jobs that target the GitHub Actions `production` environment. If `deploy` or `publish-download` fails with `Could not assume role with OIDC`, the live IAM trust policy is out of sync with the `repo:OWNER/REPO:environment:production` token subject those jobs emit.
 
 Run once with admin AWS credentials (local profile or CloudShell), then re-run the failed workflows:
 
@@ -22,6 +22,6 @@ chmod +x infra/scripts/bootstrap-github-oidc-trust.sh
 GITHUB_REPOSITORY=tinytim3271-wq/mechpro-dispatch ./infra/scripts/bootstrap-github-oidc-trust.sh
 ```
 
-This temporarily widens trust to `repo:OWNER/REPO:*` so the next successful `cdk deploy` can reconcile the role back to the branch-scoped subject in `infra/lib/github-actions-stack.ts`.
+This temporarily widens trust to `repo:OWNER/REPO:*` so the next successful `cdk deploy` can reconcile the role back to the production-environment subject in `infra/lib/github-actions-stack.ts`.
 
 Optional repository variable `SITE_BUCKET_NAME` skips CloudFormation bucket lookup in the Windows `publish-download` job.
