@@ -27,7 +27,6 @@
     "files": [
       "app.js",
       "diagnostics-ui.js",
-
       "index.html",
       "styles.css",
       "theme.css",

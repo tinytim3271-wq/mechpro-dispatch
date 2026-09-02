@@ -88,7 +88,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${stripeSecretKey}`,
+        Authorization: `Basic ${Buffer.from(stripeSecretKey + ':').toString('base64')}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: params.toString(),

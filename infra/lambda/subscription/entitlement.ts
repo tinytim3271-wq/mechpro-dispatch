@@ -13,7 +13,7 @@ const ACTIVE_STATUSES = new Set(['active', 'trialing']);
 
 export function subscriptionEntitlement(account: SubscriptionAccount | undefined, now = new Date()) {
   if (!account) return { active: false, status: 'missing', expiresAt: null };
-  const status = String(account.subscriptionStatus || 'active').toLowerCase();
+  const status = String(account.subscriptionStatus || 'missing').toLowerCase();
   const expiresAt = account.subscriptionExpiresAt || null;
   const expired = Boolean(expiresAt && new Date(expiresAt).getTime() <= now.getTime());
   const active = account.suspended !== true && ACTIVE_STATUSES.has(status) && !expired;
