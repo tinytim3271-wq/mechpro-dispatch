@@ -529,7 +529,7 @@
     state.users = sanitizeUsers(state.users);
     localStorage.setItem(STORE, JSON.stringify(state));
   }
-  var cognitoConfig2 = { region: "us-east-1", userPoolId: "us-east-1_Ng8TxYJkm", clientId: "3l8ocn4271f12hn6l0g30r8alc", apiUrl: "https://njz0co209l.execute-api.us-east-1.amazonaws.com" };
+  var cognitoConfig2 = window.__MECHPRO_CONFIG__.cognito;
   var isDesktopApp2 = Boolean(window.mechproDesktop);
   var DESKTOP_ENTITLEMENT_INTERVAL2 = 5 * 60 * 1e3;
   var desktopEntitlementVerified = !isDesktopApp2;
