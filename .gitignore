@@ -7,6 +7,7 @@ diagnostics/j2534-service/**/obj/
 infra/cdk.out/
 infra/.cdk.staging/
 infra/cdk-outputs.json
+.playwright-mcp/
 *.log
 .env
 .env.*
