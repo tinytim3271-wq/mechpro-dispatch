@@ -1,21 +1,32 @@
-const CACHE_NAME = 'mechpro-shell-v15';
-const LUCIDE_URL = 'https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js';
+const CACHE_NAME = 'mechpro-shell-v16';
 const SHELL_FILES = [
   './',
   './index.html',
   './app.js',
+  './diagnostics-ui.js',
   './styles.css',
   './theme.css',
   './manifest.webmanifest',
   './mechpro-icon.svg',
+  './assets/vendor/lucide.min.js',
+  './assets/fonts/fonts.css',
+  './assets/fonts/dm-sans-latin-400-normal.woff2',
+  './assets/fonts/dm-sans-latin-500-normal.woff2',
+  './assets/fonts/dm-sans-latin-600-normal.woff2',
+  './assets/fonts/dm-sans-latin-700-normal.woff2',
+  './assets/fonts/barlow-condensed-latin-500-normal.woff2',
+  './assets/fonts/barlow-condensed-latin-600-normal.woff2',
+  './assets/fonts/barlow-condensed-latin-700-normal.woff2',
+  './assets/fonts/jetbrains-mono-latin-500-normal.woff2',
+  './assets/fonts/jetbrains-mono-latin-600-normal.woff2',
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(async cache => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
     await cache.addAll(SHELL_FILES);
-    await cache.add(LUCIDE_URL).catch(() => undefined);
-  }));
-  self.skipWaiting();
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', event => {
@@ -30,12 +41,7 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) {
-    if (url.href === LUCIDE_URL) {
-      event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
-    }
-    return;
-  }
+  if (url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(

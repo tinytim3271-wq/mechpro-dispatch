@@ -2,9 +2,10 @@
 
 ## Cursor Cloud specific instructions
 
-This repository has two independent parts:
+This repository has three independent parts:
 
-- **Frontend PWA** (repo root: `index.html`, `app.js`, `styles.css`, `service-worker.js`, `assets/`) — a vanilla-JS, local-first Progressive Web App for shop dispatch and work orders. There is **no build step and no `package.json`** at the root; it is served as static files. It boots straight into the dispatch board using seed data persisted in `localStorage` (`mechpro-dispatch-v1`) with an admin user already signed in, so no login is required for local development. The Cognito/API integration (`cognitoConfig` in `app.js`) is optional and fails gracefully offline.
+- **Frontend PWA** (repo root: `index.html`, `app.js`, `styles.css`, `service-worker.js`, `assets/`) — a vanilla-JS, local-first Progressive Web App for shop dispatch and work orders. It is still served as static files and boots straight into the dispatch board using seed data persisted in `localStorage` (`mechpro-dispatch-v1`) with an admin user already signed in. The Cognito/API integration is optional and fails gracefully offline.
+- **Web/packaging source** (`src/`, root `package.json`, `scripts/`) — edit source under `src/`, then run `npm run build:web` to refresh the committed root `app.js`. `npm run sync` also copies the offline shell into `www/` for the Capacitor Android wrapper in `android/`.
 - **AWS CDK infra** (`infra/`) — a TypeScript CDK app (DynamoDB, Cognito, API Gateway, Lambda, S3). Standard commands are documented in `infra/README.md` and `infra/package.json` (`npm test`, `npm run build`, `npx cdk synth`). Actual `cdk deploy` requires AWS credentials and is out of scope for local dev.
 
 ### Toolchain / non-obvious gotchas
@@ -21,7 +22,7 @@ Serve the repo root over HTTP (service worker registration is gated on a secure 
 python3 -m http.server 3000 --bind 127.0.0.1   # then open http://127.0.0.1:3000/
 ```
 
-Editing `app.js`/`styles.css` only requires a browser refresh (no bundler/HMR). The service worker caches aggressively; hard-reload or clear the `mechpro-dispatch-v1` service-worker cache if edits don't appear.
+Serving the root still only requires a browser refresh. When editing source under `src/`, run `npm run build:web` first. The service worker caches aggressively; hard-reload or clear the `mechpro-dispatch-v1` service-worker cache if edits don't appear.
 
 ### OEM Diagnostics (J2534 / Windows)
 
