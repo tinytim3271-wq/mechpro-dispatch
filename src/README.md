@@ -35,6 +35,6 @@ Keep modules side-effect free where possible: export `init(state)` or register v
 npm run build:web    # bundle src/ → app.js
 npm run dev:web      # watch rebuild
 npm run serve        # static server at http://127.0.0.1:3000/
-npm run validate     # build:web + infra tests
+npm run validate     # build:web + infra tests + j2534 tests
 npm run desktop      # Electron window
 ```

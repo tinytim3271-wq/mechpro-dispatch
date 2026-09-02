@@ -6,6 +6,7 @@
   "author": "MechPro",
   "license": "UNLICENSED",
   "scripts": {
+    "serve": "python3 -m http.server 3000 --bind 127.0.0.1",
     "build:web": "node scripts/build-web.mjs",
     "dev:web": "node scripts/build-web.mjs --watch",
     "copy:web": "node scripts/copy-web.mjs",
