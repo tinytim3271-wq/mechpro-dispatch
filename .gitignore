@@ -8,6 +8,7 @@ infra/cdk.out/
 infra/.cdk.staging/
 infra/cdk-outputs.json
 .playwright-mcp/
+www/
 *.log
 .env
 .env.*

@@ -6,15 +6,25 @@
   "author": "MechPro",
   "license": "UNLICENSED",
   "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "dev:web": "node scripts/build-web.mjs --watch",
+    "copy:web": "node scripts/copy-web.mjs",
+    "validate:infra": "npm --prefix infra test -- --runInBand && npm --prefix infra run build",
+    "validate": "npm run build:web && npm run validate:infra && npm run test:j2534",
+    "sync": "npm run build:web && npm run copy:web && npx cap sync android",
+    "open:android": "npx cap open android",
+    "build:android": "npm run sync",
     "desktop": "electron .",
     "build:j2534": "bash diagnostics/j2534-service/scripts/publish-win-x64.sh",
-    "build:windows": "npm run build:j2534 && electron-builder --win nsis --publish never",
-    "build:windows:zip": "npm run build:j2534 && electron-builder --win zip --publish never",
+    "build:windows": "npm run build:web && npm run build:j2534 && electron-builder --win nsis --publish never",
+    "build:windows:zip": "npm run build:web && npm run build:j2534 && electron-builder --win zip --publish never",
     "test:j2534": "node diagnostics/j2534-host-node/test/host.test.js"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
     "electron": "^38.1.2",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2"
   },
   "build": {
     "appId": "com.mechpro.dispatch",
@@ -74,7 +84,9 @@
     }
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1111.0"
+    "@aws-sdk/client-bedrock-runtime": "^3.1111.0",
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
   },
   "allowScripts": {
     "electron@38.8.6": true,

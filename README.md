@@ -25,7 +25,7 @@
 
 ## Quick Start
 
-No build step. Serve the repo root over HTTP:
+Serve the repo root over HTTP:
 
 ```bash
 python3 -m http.server 3000 --bind 127.0.0.1
@@ -88,13 +88,15 @@ no login required for local development.
 ```
 mechpro-dispatch/
 ├── index.html              # Single-page app shell (PWA entry point)
-├── app.js                  # All frontend logic (~320 KB, vanilla JS, no bundler)
+├── app.js                  # Committed browser bundle generated from src/
 ├── styles.css              # Component styles (minified, ~49 KB)
 ├── theme.css               # Visual token overrides, dark mode (minified, ~16 KB)
 ├── diagnostics-ui.js       # OBD / J2534 diagnostics panel UI
 ├── service-worker.js       # Offline cache + background sync
 ├── manifest.webmanifest    # PWA manifest
 │
+├── src/                    # Source tree for the committed app.js bundle
+├── android/                # Capacitor Android wrapper project
 ├── diagnostics/
 │   ├── j2534-service/      # .NET 8 J2534 native host (Windows)
 │   │   └── publish/win-x64/J2534.Host.exe
@@ -185,8 +187,8 @@ Copy `infra/.env.example` (or `infra/lambda/common/runtime-env.ts`) to configure
 | `AGENTPHONE_WEBHOOK_SECRET` | AI phone webhook HMAC secret |
 | `BEDROCK_REGION` | AWS region for Bedrock AI calls |
 
-The frontend reads Cognito config from `cognitoConfig` inside `app.js` and
-fails gracefully offline if AWS is not configured.
+The frontend bundle reads Cognito config from the app runtime and fails
+gracefully offline if AWS is not configured.
 
 ---
 
@@ -252,10 +254,26 @@ Requires Windows for the final NSIS packaging step. CI: `.github/workflows/windo
 
 ---
 
+## Android App (Capacitor)
+
+```bash
+npm install
+npm run sync
+npm run open:android
+```
+
+`npm run sync` rebuilds `app.js`, copies the offline web shell into `www/`, and
+syncs the Android project under `android/`.
+
+See [`BUILD_ANDROID.md`](BUILD_ANDROID.md) for APK build details.
+
+---
+
 ## Development Notes
 
-- **No build step** for the frontend — edit `app.js` / `styles.css` / `theme.css`
-  and refresh.
+- **Static runtime, optional source build** — serving the repo root still works
+  with no bundler in the browser, but source edits now live under `src/`; run
+  `npm run build:web` (or `npm run sync` for Android) after changing `src/`.
 - **Node via nvm** — the repo ships a `.nvmrc`. Run `nvm use` before any `npm`
   commands, or prefix with `bash -lc '...'` to source nvm.
 - **Service worker caches aggressively** — use DevTools → Application →
