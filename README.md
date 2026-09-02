@@ -174,7 +174,19 @@ Merged infrastructure and API compatibility layers from `MechPro` and `MechPro-a
 
 ## Configuration & Environment
 
-Copy `infra/.env.example` (or `infra/lambda/common/runtime-env.ts`) to configure:
+Copy `infra/.env.example` (or `infra/lambda/common/runtime-env.ts`) to configure Lambda env vars.
+Frontend Cognito/API URLs are generated from CDK outputs:
+
+```bash
+cd infra
+npx cdk deploy --all --outputs-file cdk-outputs.json
+cd ..
+npm run sync:config    # writes src/shared/config.js
+npm run build:web
+```
+
+`npm run build:web` runs `sync:config` automatically. Committed defaults live in
+`infra/cdk-outputs.example.json` when `cdk-outputs.json` is absent (local dev).
 
 | Variable | Purpose |
 |---|---|

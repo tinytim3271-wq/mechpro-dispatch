@@ -1,0 +1,9 @@
+{
+  "MechProAuthStack": {
+    "UserPoolId": "us-east-1_Ng8TxYJkm",
+    "UserPoolClientId": "3l8ocn4271f12hn6l0g30r8alc"
+  },
+  "MechProApiStack": {
+    "ApiUrl": "https://njz0co209l.execute-api.us-east-1.amazonaws.com"
+  }
+}

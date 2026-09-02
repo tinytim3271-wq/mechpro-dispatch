@@ -25,6 +25,7 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm run build:web
+      - run: npm run test:config
       - run: test -f app.js
 
   validate:
@@ -67,4 +68,11 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}
           aws-region: us-east-1
-      - run: npx cdk deploy --all --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}
+      - run: npx cdk deploy --all --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }} --outputs-file cdk-outputs.json
+      - name: Rebuild web bundle from CDK outputs
+        run: |
+          cd ..
+          npm ci
+          npm run build:web
+      - name: Refresh static site with updated app.js
+        run: npx cdk deploy MechProStaticSiteStack MechProCdnStack --require-approval never --strict -c enableCustomDomain=true
