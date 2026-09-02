@@ -33,7 +33,7 @@ export class GitHubActionsStack extends Stack {
     const role = new iam.Role(this, 'DeployRole', {
       roleName: 'MechProGitHubActionsDeployRole',
       assumedBy: principal,
-      description: `CDK deployment role for ${props.repository} production environment`,
+      description: `CDK deployment role for ${props.repository} (${subjectPattern})`,
     });
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['sts:AssumeRole'],
