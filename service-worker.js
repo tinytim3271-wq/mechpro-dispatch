@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mechpro-shell-v16';
+const CACHE_NAME = 'mechpro-shell-v17';
 const SHELL_FILES = [
   './',
   './index.html',

@@ -513,6 +513,7 @@
   var platformAccounts = null;
   var platformAccountsLoading = false;
   var elmPort = null;
+  var cloudSyncStatus = "local";
   var usStates = [{ code: "AL", name: "Alabama" }, { code: "AK", name: "Alaska" }, { code: "AZ", name: "Arizona" }, { code: "AR", name: "Arkansas" }, { code: "CA", name: "California" }, { code: "CO", name: "Colorado" }, { code: "CT", name: "Connecticut" }, { code: "DE", name: "Delaware" }, { code: "DC", name: "District of Columbia" }, { code: "FL", name: "Florida" }, { code: "GA", name: "Georgia" }, { code: "HI", name: "Hawaii" }, { code: "ID", name: "Idaho" }, { code: "IL", name: "Illinois" }, { code: "IN", name: "Indiana" }, { code: "IA", name: "Iowa" }, { code: "KS", name: "Kansas" }, { code: "KY", name: "Kentucky" }, { code: "LA", name: "Louisiana" }, { code: "ME", name: "Maine" }, { code: "MD", name: "Maryland" }, { code: "MA", name: "Massachusetts" }, { code: "MI", name: "Michigan" }, { code: "MN", name: "Minnesota" }, { code: "MS", name: "Mississippi" }, { code: "MO", name: "Missouri" }, { code: "MT", name: "Montana" }, { code: "NE", name: "Nebraska" }, { code: "NV", name: "Nevada" }, { code: "NH", name: "New Hampshire" }, { code: "NJ", name: "New Jersey" }, { code: "NM", name: "New Mexico" }, { code: "NY", name: "New York" }, { code: "NC", name: "North Carolina" }, { code: "ND", name: "North Dakota" }, { code: "OH", name: "Ohio" }, { code: "OK", name: "Oklahoma" }, { code: "OR", name: "Oregon" }, { code: "PA", name: "Pennsylvania" }, { code: "RI", name: "Rhode Island" }, { code: "SC", name: "South Carolina" }, { code: "SD", name: "South Dakota" }, { code: "TN", name: "Tennessee" }, { code: "TX", name: "Texas" }, { code: "UT", name: "Utah" }, { code: "VT", name: "Vermont" }, { code: "VA", name: "Virginia" }, { code: "WA", name: "Washington" }, { code: "WV", name: "West Virginia" }, { code: "WI", name: "Wisconsin" }, { code: "WY", name: "Wyoming" }];
   function sanitizeUsers(users) {
     return users.map(({ password, ...user }) => user);
@@ -620,6 +621,49 @@
   }
   function clearAuthSession() {
     sessionStorage.removeItem("mechpro-session");
+    cloudSyncStatus = "local";
+  }
+  function syncStatusBadge() {
+    const labels = { local: "Local only", connected: "Cloud sync", offline: "Offline" }, icons = { local: "hard-drive", connected: "cloud", offline: "cloud-off" };
+    return `<span class="sync-status sync-status--${cloudSyncStatus}" title="Data source: ${labels[cloudSyncStatus]}">${icon(icons[cloudSyncStatus], 14)}<span class="sync-status-label">${labels[cloudSyncStatus]}</span></span>`;
+  }
+  function appearanceFieldset(profile = shopProfile()) {
+    return `<fieldset class="full appearance-settings"><legend>Appearance</legend><div class="appearance-options">${[["device", "monitor-smartphone", "Device setting"], ["light", "sun", "Light"], ["dark", "moon", "Dark"]].map(([value2, iconName, label2]) => `<label class="appearance-option"><input type="radio" name="themeMode" value="${value2}" ${profile.themeMode === value2 ? "checked" : ""}/><span>${icon(iconName, 17)}<b>${label2}</b></span></label>`).join("")}</div></fieldset>`;
+  }
+  function bindAppearanceControls(root = document) {
+    root.querySelectorAll("[name=themeMode]").forEach((input) => input.addEventListener("change", () => applyAppearance(input.value)));
+  }
+  function bindUserMenu() {
+    const menu = document.querySelector("#user-menu"), toggle = document.querySelector("#user-menu-toggle"), panel = document.querySelector("#user-menu-panel"), close = () => {
+      panel?.setAttribute("hidden", "");
+      toggle?.setAttribute("aria-expanded", "false");
+    };
+    toggle?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (panel?.hasAttribute("hidden")) {
+        panel.removeAttribute("hidden");
+        toggle.setAttribute("aria-expanded", "true");
+      } else close();
+    });
+    document.querySelector("#user-menu-settings")?.addEventListener("click", () => {
+      close();
+      state.route = "settings";
+      save();
+      render();
+    });
+    document.querySelector("#sign-out")?.addEventListener("click", () => {
+      close();
+      state.currentUserId = null;
+      clearAuthSession();
+      save();
+      render();
+    });
+    if (menu && !menu.dataset.bound) {
+      menu.dataset.bound = "1";
+      document.addEventListener("click", (event) => {
+        if (!menu.contains(event.target)) close();
+      });
+    }
   }
   var MUTATION_QUEUE_STORE = "mechpro-mutation-queue-v1";
   var flushingMutationQueue = false;
@@ -741,9 +785,11 @@
   async function loadCustomersFromApi() {
     try {
       state.customers = await apiFetch("/entities/customers");
+      cloudSyncStatus = "connected";
       save();
     } catch (error) {
       console.error("Failed to load customers from API; using local data", error);
+      cloudSyncStatus = authSession() ? "offline" : "local";
     }
   }
   async function pushOrderToApi(record) {
@@ -770,9 +816,11 @@
   async function loadOrdersFromApi() {
     try {
       state.orders = await apiFetch("/entities/orders");
+      cloudSyncStatus = "connected";
       save();
     } catch (error) {
       console.error("Failed to load orders from API; using local data", error);
+      cloudSyncStatus = authSession() ? "offline" : "local";
     }
   }
   async function updateInvoiceInApi(record) {
@@ -1069,7 +1117,7 @@
   }
   function shell(content) {
     const user = currentUser(), active = visibleOrders().filter((x) => !["completed", "invoiced"].includes(x.status)).length, shift = openShift(user.id);
-    return `<div class="app-shell"><aside class="sidebar" id="sidebar"><div class="brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders</small></div></div><div class="nav-label">Operations</div><nav class="nav">${nav("dispatch", "layout-dashboard", "Dispatch board", active)}${nav("orders", "clipboard-list", "Work orders", visibleOrders().length)}${nav("schedule", "calendar-days", "Schedule")}${nav("customers", "users", "Customers")}${nav("invoices", "receipt-text", "Invoices", state.invoices.filter((x) => x.status === "overdue").length)}</nav><div class="nav-label shop-label">Shop</div><nav class="nav">${nav("ai", "sparkles", "AI Workbench")}${nav("accounting", "landmark", "Accounting")}${nav("payroll", "wallet-cards", "Payroll")}${nav("imports", "file-up", "Import data")}${nav("employees", "user-round-cog", "Employees")}${nav("reports", "chart-no-axes-combined", "Reports")}${nav("settings", "settings", "Settings")}</nav><div class="sidebar-foot"><div class="shop-card"><strong>Your Car Guy</strong><span>Main Shop \xB7 Lubbock, TX</span></div><button class="user-row" id="sign-out" title="Sign out"><div class="avatar">${initials(user.name)}</div><div><strong>${user.name}</strong><span>${roleLabel[user.role]} \xB7 Sign out</span></div>${icon("log-out", 14)}</button></div></aside><main class="main"><header class="topbar"><button class="icon-button menu-button" id="menu-button" title="Open menu">${icon("menu")}</button><label class="global-search">${icon("search", 16)}<input id="global-search" value="${query}" placeholder="Search ROs, customers, VIN..."/><span class="shortcut">/</span></label><div class="top-actions"><button class="shift-button ${shift ? "clocked" : ""}" id="global-clock">${icon(shift ? "square" : "play", 14)} ${shift ? `Clock out \xB7 ${formatTime(shift.clockIn)}` : "Clock in"}</button><button class="location-pill">${icon("map-pin", 15)} Main Shop ${icon("chevron-down", 13)}</button><button class="icon-button" title="Notifications">${icon("bell")}</button></div></header><div class="content">${content}</div></main></div>`;
+    return `<div class="app-shell"><aside class="sidebar" id="sidebar"><div class="brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders</small></div></div><div class="nav-label">Operations</div><nav class="nav">${nav("dispatch", "layout-dashboard", "Dispatch board", active)}${nav("orders", "clipboard-list", "Work orders", visibleOrders().length)}${nav("schedule", "calendar-days", "Schedule")}${nav("customers", "users", "Customers")}${nav("invoices", "receipt-text", "Invoices", state.invoices.filter((x) => x.status === "overdue").length)}</nav><div class="nav-label shop-label">Shop</div><nav class="nav">${nav("ai", "sparkles", "AI Workbench")}${nav("accounting", "landmark", "Accounting")}${nav("payroll", "wallet-cards", "Payroll")}${nav("imports", "file-up", "Import data")}${nav("employees", "user-round-cog", "Employees")}${nav("reports", "chart-no-axes-combined", "Reports")}${nav("settings", "settings", "Settings")}</nav><div class="sidebar-foot"><div class="shop-card"><strong>Your Car Guy</strong><span>Main Shop \xB7 Lubbock, TX</span></div><div class="user-menu" id="user-menu"><button class="user-row" id="user-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu-panel"><div class="avatar">${initials(user.name)}</div><div><strong>${user.name}</strong><span>${roleLabel[user.role]}</span></div>${icon("chevron-up", 14)}</button><div class="user-menu-panel" id="user-menu-panel" role="menu" hidden><button type="button" role="menuitem" id="user-menu-settings">${icon("settings", 14)} Shop settings</button><button type="button" role="menuitem" id="sign-out">${icon("log-out", 14)} Sign out</button></div></div></div></aside><main class="main"><header class="topbar"><button class="icon-button menu-button" id="menu-button" type="button" aria-label="Open navigation menu" title="Open menu">${icon("menu")}</button><label class="global-search">${icon("search", 16)}<input id="global-search" aria-label="Search work orders, customers, and VINs" value="${query}" placeholder="Search ROs, customers, VIN..."/><span class="shortcut">/</span></label><div class="top-actions">${syncStatusBadge()}<button class="shift-button ${shift ? "clocked" : ""}" id="global-clock">${icon(shift ? "square" : "play", 14)} ${shift ? `Clock out \xB7 ${formatTime(shift.clockIn)}` : "Clock in"}</button><button class="location-pill">${icon("map-pin", 15)} Main Shop ${icon("chevron-down", 13)}</button><button class="icon-button" type="button" aria-label="Notifications" title="Notifications">${icon("bell")}</button></div></header><div class="content">${content}</div></main></div>`;
   }
   function heading(kicker, title, description, action = true) {
     return `<div class="page-head"><div><div class="eyebrow">${kicker}</div><h1>${title}</h1><p>${description}</p></div><div class="head-actions"><button class="secondary" id="export-button">${icon("download", 15)} Export</button>${action ? `<button class="primary" id="new-ro-button">${icon("plus", 15)} New work order</button>` : ""}</div></div>`;
@@ -2355,12 +2403,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     document.querySelectorAll("[data-order]").forEach((x) => x.onclick = () => openOrder(x.dataset.order));
     document.querySelector("#new-ro-button")?.addEventListener("click", openNew);
     document.querySelector("#new-employee")?.addEventListener("click", openEmployee);
-    document.querySelector("#sign-out")?.addEventListener("click", () => {
-      state.currentUserId = null;
-      clearAuthSession();
-      save();
-      render();
-    });
+    bindUserMenu();
     document.querySelector("#global-clock")?.addEventListener("click", toggleShift);
     document.querySelector("#job-clock")?.addEventListener("click", (event) => {
       const id = event.currentTarget.dataset.workOrderId;
@@ -2701,7 +2744,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
   }
   settings = function() {
     const profile = shopProfile(), t = state.taxSettings, stateOptions = usStates.map((s) => `<option value="${s.code}" ${t.state === s.code ? "selected" : ""}>${s.name}</option>`).join("");
-    return shell(`${heading("Administration", "Shop settings", "Branding, invoice defaults, tax, and optional provider readiness.", false)}<form class="settings-panel form-grid" id="shop-profile-form"><label>Shop name<input name="shopName" value="${escapeHtml(profile.shopName)}" required/></label><label>Phone<input name="phone" value="${escapeHtml(profile.phone)}"/></label><label class="full">Address<input name="address" value="${escapeHtml(profile.address)}"/></label><label>Logo URL<input name="logoUrl" type="url" value="${escapeHtml(profile.logoUrl)}"/></label><label>Default labor rate<input name="laborRate" type="number" step=".01" value="${Number(profile.laborRate)}"/></label><label class="full">Invoice footer<input name="invoiceFooter" value="${escapeHtml(profile.invoiceFooter)}"/></label><div class="full service-contract"><h2>Commercial integrations</h2><p>CarFax service history and license-plate recognition require provider contracts and server-side credentials. They remain unavailable until configured by the platform operator.</p></div><label class="toggle-field"><input type="checkbox" disabled ${profile.carfaxEnabled ? "checked" : ""}/><span>CarFax provider configured</span></label><label class="toggle-field"><input type="checkbox" disabled ${profile.plateProviderEnabled ? "checked" : ""}/><span>Plate recognition configured</span></label><div class="full"><button class="primary">${icon("save", 14)} Save business profile</button></div></form><div class="settings-panel"><form class="form-grid" id="tax-settings-form"><label>Filing state<select name="state">${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${escapeHtml(t.taxId)}"/></label><label>Sales tax rate %<input name="rate" type="number" step=".01" min="0" value="${t.rate}"/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary">Save tax settings</button></div></form></div>`);
+    return shell(`${heading("Administration", "Shop settings", "Branding, invoice defaults, tax, and optional provider readiness.", false)}<form class="settings-panel form-grid" id="shop-profile-form">${appearanceFieldset(profile)}<label>Shop name<input name="shopName" value="${escapeHtml(profile.shopName)}" required/></label><label>Phone<input name="phone" value="${escapeHtml(profile.phone)}"/></label><label class="full">Address<input name="address" value="${escapeHtml(profile.address)}"/></label><label>Logo URL<input name="logoUrl" type="url" value="${escapeHtml(profile.logoUrl)}"/></label><label>Default labor rate<input name="laborRate" type="number" step=".01" value="${Number(profile.laborRate)}"/></label><label class="full">Invoice footer<input name="invoiceFooter" value="${escapeHtml(profile.invoiceFooter)}"/></label><div class="full service-contract"><h2>Commercial integrations</h2><p>CarFax service history and license-plate recognition require provider contracts and server-side credentials. They remain unavailable until configured by the platform operator.</p></div><label class="toggle-field"><input type="checkbox" disabled ${profile.carfaxEnabled ? "checked" : ""}/><span>CarFax provider configured</span></label><label class="toggle-field"><input type="checkbox" disabled ${profile.plateProviderEnabled ? "checked" : ""}/><span>Plate recognition configured</span></label><div class="full"><button class="primary">${icon("save", 14)} Save business profile</button></div></form><div class="settings-panel"><form class="form-grid" id="tax-settings-form"><label>Filing state<select name="state">${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${escapeHtml(t.taxId)}"/></label><label>Sales tax rate %<input name="rate" type="number" step=".01" min="0" value="${t.rate}"/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary">Save tax settings</button></div></form></div>`);
   };
   function bindExpandedFeatures() {
     document.querySelector("#add-appointment")?.addEventListener("click", addAppointment);
@@ -2940,7 +2983,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
   }
   settings = function() {
     const profile = shopProfile(), t = state.taxSettings, stateOptions = usStates.map((s) => `<option value="${s.code}" ${t.state === s.code ? "selected" : ""}>${s.name}</option>`).join(""), kinds = ["Part", "Tire", "Supply", "Asset"], couponRows = profile.coupons.map((coupon) => `<tr><td><b>${escapeHtml(coupon.code)}</b></td><td>${coupon.percent}%</td><td><span class="badge ${coupon.active ? "paid" : "estimate"}">${coupon.active ? "Active" : "Inactive"}</span></td><td><div class="coupon-actions"><button type="button" class="mini-action" data-edit-coupon="${escapeHtml(coupon.id)}">${icon("pencil", 13)} Edit</button><button type="button" class="mini-action" data-toggle-coupon="${escapeHtml(coupon.id)}">${icon(coupon.active ? "pause" : "play", 13)} ${coupon.active ? "Disable" : "Enable"}</button><button type="button" class="mini-action danger" data-delete-coupon="${escapeHtml(coupon.id)}">${icon("trash-2", 13)} Delete</button></div></td></tr>`).join("");
-    return shell(`${heading("Administration", "Shop settings", "Branding, invoice defaults, coupons, vendors, tax, and optional provider readiness.", false)}<form class="settings-panel form-grid" id="shop-profile-form"><div class="full statement-head"><div><div class="eyebrow">Business identity</div><h2>Branding and invoice defaults</h2></div></div><label>Shop name<input name="shopName" value="${escapeHtml(profile.shopName)}" required/></label><label>Phone<input name="phone" value="${escapeHtml(profile.phone)}"/></label><label class="full">Address<input name="address" value="${escapeHtml(profile.address)}"/></label><label>Logo URL<input name="logoUrl" type="url" value="${escapeHtml(profile.logoUrl)}" placeholder="https://example.com/logo.png"/></label><label>Default labor rate<input name="laborRate" type="number" min="0" step=".01" value="${Number(profile.laborRate)}"/></label><label>Brand color<input name="brandColor" type="color" value="${profile.brandColor}"/></label><label>Accent color<input name="accentColor" type="color" value="${profile.accentColor}"/></label><label class="full">Invoice footer<input name="invoiceFooter" value="${escapeHtml(profile.invoiceFooter)}"/></label><div class="full"><button class="primary">${icon("save", 14)} Save business profile</button></div></form><section class="settings-panel"><div class="statement-head"><div><div class="eyebrow">Discounts</div><h2>Coupons</h2></div><button class="primary" type="button" id="add-coupon">${icon("badge-percent", 14)} Add coupon</button></div><div class="data-panel"><table><thead><tr><th>Code</th><th>Percent</th><th>Status</th><th>Actions</th></tr></thead><tbody>${couponRows || `<tr><td colspan="4">No coupons configured.</td></tr>`}</tbody></table></div></section><form class="settings-panel form-grid" id="vendor-defaults-form"><div class="full statement-head"><div><div class="eyebrow">Purchasing</div><h2>Default vendors</h2></div></div><label>Overall default<select name="defaultVendor">${vendorOptions(profile.defaultVendor)}</select></label>${kinds.map((kind) => `<label>${kind} default<select name="vendor${kind}">${vendorOptions(profile.defaultVendorByKind?.[kind] || "")}</select></label>`).join("")}<div class="full"><button class="primary">${icon("save", 14)} Save vendor defaults</button></div></form><div class="settings-panel"><form class="form-grid" id="tax-settings-form"><label>Filing state<select name="state">${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${escapeHtml(t.taxId)}"/></label><label>Sales tax rate %<input name="rate" type="number" step=".01" min="0" value="${t.rate}"/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary">${icon("save", 14)} Save tax settings</button></div></form></div>`);
+    return shell(`${heading("Administration", "Shop settings", "Branding, invoice defaults, coupons, vendors, tax, and optional provider readiness.", false)}<form class="settings-panel form-grid" id="shop-profile-form"><div class="full statement-head"><div><div class="eyebrow">Business identity</div><h2>Branding and invoice defaults</h2></div></div>${appearanceFieldset(profile)}<label>Shop name<input name="shopName" value="${escapeHtml(profile.shopName)}" required/></label><label>Phone<input name="phone" value="${escapeHtml(profile.phone)}"/></label><label class="full">Address<input name="address" value="${escapeHtml(profile.address)}"/></label><label>Logo URL<input name="logoUrl" type="url" value="${escapeHtml(profile.logoUrl)}" placeholder="https://example.com/logo.png"/></label><label>Default labor rate<input name="laborRate" type="number" min="0" step=".01" value="${Number(profile.laborRate)}"/></label><label>Brand color<input name="brandColor" type="color" value="${profile.brandColor}"/></label><label>Accent color<input name="accentColor" type="color" value="${profile.accentColor}"/></label><label class="full">Invoice footer<input name="invoiceFooter" value="${escapeHtml(profile.invoiceFooter)}"/></label><div class="full"><button class="primary">${icon("save", 14)} Save business profile</button></div></form><section class="settings-panel"><div class="statement-head"><div><div class="eyebrow">Discounts</div><h2>Coupons</h2></div><button class="primary" type="button" id="add-coupon">${icon("badge-percent", 14)} Add coupon</button></div><div class="data-panel"><table><thead><tr><th>Code</th><th>Percent</th><th>Status</th><th>Actions</th></tr></thead><tbody>${couponRows || `<tr><td colspan="4">No coupons configured.</td></tr>`}</tbody></table></div></section><form class="settings-panel form-grid" id="vendor-defaults-form"><div class="full statement-head"><div><div class="eyebrow">Purchasing</div><h2>Default vendors</h2></div></div><label>Overall default<select name="defaultVendor">${vendorOptions(profile.defaultVendor)}</select></label>${kinds.map((kind) => `<label>${kind} default<select name="vendor${kind}">${vendorOptions(profile.defaultVendorByKind?.[kind] || "")}</select></label>`).join("")}<div class="full"><button class="primary">${icon("save", 14)} Save vendor defaults</button></div></form><div class="settings-panel"><form class="form-grid" id="tax-settings-form"><label>Filing state<select name="state">${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${escapeHtml(t.taxId)}"/></label><label>Sales tax rate %<input name="rate" type="number" step=".01" min="0" value="${t.rate}"/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary">${icon("save", 14)} Save tax settings</button></div></form></div>`);
   };
   function openCouponForm(id = "") {
     const profile = shopProfile(), coupon = profile.coupons.find((item) => item.id === id);
@@ -2971,10 +3014,11 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     bindBrandingFeaturesCore();
     const profileForm = document.querySelector("#shop-profile-form");
     if (profileForm && !profileForm.querySelector("[name=themeMode]")) {
-      profileForm.querySelector(".statement-head")?.insertAdjacentHTML("afterend", `<fieldset class="full appearance-settings"><legend>Appearance</legend><div class="appearance-options">${[["device", "monitor-smartphone", "Device setting"], ["light", "sun", "Light"], ["dark", "moon", "Dark"]].map(([value2, iconName, label2]) => `<label class="appearance-option"><input type="radio" name="themeMode" value="${value2}" ${shopProfile().themeMode === value2 ? "checked" : ""}/><span>${icon(iconName, 17)}<b>${label2}</b></span></label>`).join("")}</div></fieldset>`);
+      profileForm.querySelector(".statement-head")?.insertAdjacentHTML("afterend", appearanceFieldset());
       lucide.createIcons();
-      profileForm.querySelectorAll("[name=themeMode]").forEach((input) => input.addEventListener("change", () => applyAppearance(input.value)));
+      bindAppearanceControls(profileForm);
     }
+    bindAppearanceControls(profileForm);
     profileForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       event.stopImmediatePropagation();
