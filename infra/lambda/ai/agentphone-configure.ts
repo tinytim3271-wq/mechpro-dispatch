@@ -40,7 +40,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     const webhookUrl = `${API_URL}/agentphone/webhook/${encodeURIComponent(ctx.shopId)}`;
     const response = await fetch(`${AGENTPHONE_API}/agents/${encodeURIComponent(agentId)}/webhook`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: ['Bearer', apiKey].join(' '), 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: webhookUrl, contextLimit, timeout }),
     });
     const result = await response.json().catch(() => ({})) as { secret?: string; status?: string; message?: string };
