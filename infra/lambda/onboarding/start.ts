@@ -81,15 +81,15 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       : records;
 
     for (let index = 0; index < recordsToDelete.length; index += 25) {
-      let requestItems: Record<string, unknown[]> = {
-        [TABLE_NAME]: recordsToDelete.slice(index, index + 25).map(item => ({
-          DeleteRequest: { Key: { pk: item.pk, sk: item.sk } },
-        })),
-      };
-      do {
-        const result = await ddb.send(new BatchWriteCommand({ RequestItems: requestItems }));
-        requestItems = (result.UnprocessedItems ?? {}) as Record<string, unknown[]>;
-      } while (Object.keys(requestItems).length > 0);
+      let unprocessed = recordsToDelete.slice(index, index + 25).map(item => ({
+        DeleteRequest: { Key: { pk: item.pk, sk: item.sk } },
+      }));
+      for (let attempt = 0; attempt < 5 && unprocessed.length; attempt += 1) {
+        const result = await ddb.send(new BatchWriteCommand({ RequestItems: { [TABLE_NAME]: unprocessed } }));
+        unprocessed = (result.UnprocessedItems?.[TABLE_NAME] as typeof unprocessed | undefined) ?? [];
+        if (unprocessed.length) await new Promise(r => setTimeout(r, 100 * 2 ** attempt));
+      }
+      if (unprocessed.length) throw new Error('Failed to delete all records (DynamoDB UnprocessedItems)');
     }
 
     const startedAt = new Date().toISOString();

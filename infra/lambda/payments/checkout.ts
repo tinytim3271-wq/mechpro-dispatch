@@ -50,21 +50,20 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     const stripeSecretKey = secret.SecretString;
     if (!stripeSecretKey) return json(409, { message: 'This shop has not connected a Stripe account yet' });
 
-    let allPaymentItems: Record<string, unknown>[] = [];
-    let lastKey: Record<string, unknown> | undefined;
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+    const payments: Record<string, unknown>[] = [];
     do {
-      const paymentsResult = await ddb.send(new QueryCommand({
+      const page = await ddb.send(new QueryCommand({
         TableName: TABLE_NAME,
         KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
         ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#' },
         ProjectionExpression: 'invoiceNumber, amount, #status',
         ExpressionAttributeNames: { '#status': 'status' },
-        ExclusiveStartKey: lastKey,
+        ExclusiveStartKey: lastEvaluatedKey as any,
       }));
-      allPaymentItems = allPaymentItems.concat(paymentsResult.Items ?? []);
-      lastKey = paymentsResult.LastEvaluatedKey as Record<string, unknown> | undefined;
-    } while (lastKey);
-    const payments = allPaymentItems.filter(payment => payment.invoiceNumber === invoiceNumber);
+      lastEvaluatedKey = page.LastEvaluatedKey as any;
+      payments.push(...(page.Items ?? []).filter(payment => payment.invoiceNumber === invoiceNumber));
+    } while (lastEvaluatedKey);
     const balance = openInvoiceBalance(invoice.amount, payments);
     if (balance <= 0) return json(409, { message: 'Invoice has no open balance' });
 

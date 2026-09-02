@@ -12,11 +12,12 @@ export interface SubscriptionAccount {
 const ACTIVE_STATUSES = new Set(['active', 'trialing']);
 
 export function subscriptionEntitlement(account: SubscriptionAccount | undefined, now = new Date()) {
-  const status = String(account?.subscriptionStatus || (account ? 'active' : 'inactive')).toLowerCase();
-  const expiresAt = account?.subscriptionExpiresAt || null;
+  if (!account) return { active: false, status: 'missing', expiresAt: null };
+  const status = String(account.subscriptionStatus || 'active').toLowerCase();
+  const expiresAt = account.subscriptionExpiresAt || null;
   const expired = Boolean(expiresAt && new Date(expiresAt).getTime() <= now.getTime());
-  const active = Boolean(account) && account?.suspended !== true && ACTIVE_STATUSES.has(status) && !expired;
-  return { active, status: account?.suspended ? 'suspended' : expired ? 'expired' : status, expiresAt };
+  const active = account.suspended !== true && ACTIVE_STATUSES.has(status) && !expired;
+  return { active, status: account.suspended ? 'suspended' : expired ? 'expired' : status, expiresAt };
 }
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
