@@ -23,6 +23,8 @@ describe('desktop subscription entitlement', () => {
 	test('rejects missing, suspended, inactive, and expired accounts', () => {
 		const now = new Date('2026-08-17T12:00:00.000Z');
 		expect(subscriptionEntitlement(undefined, now).active).toBe(false);
+		expect(subscriptionEntitlement(undefined, now).status).toBe('missing');
+		expect(subscriptionEntitlement({ subscriptionStatus: '' }, now).status).toBe('missing');
 		expect(subscriptionEntitlement({ suspended: true }, now).status).toBe('suspended');
 		expect(subscriptionEntitlement({ subscriptionStatus: 'past_due' }, now).active).toBe(false);
 		expect(subscriptionEntitlement({ subscriptionStatus: 'active', subscriptionExpiresAt: '2026-08-17T11:59:59.000Z' }, now).status).toBe('expired');
