@@ -2280,12 +2280,11 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
       try {
         const tokens = await cognitoSignIn(data.email.trim(), data.password);
         const claims = decodeJwt(tokens.IdToken);
-        const user = state.users.find((item) => item.active && item.email.toLowerCase() === data.email.trim().toLowerCase());
+        let user = state.users.find((item) => item.active && item.email.toLowerCase() === data.email.trim().toLowerCase());
         if (!user) {
-          errorEl.textContent = "Signed in, but no local employee profile matches this account yet.";
-          errorEl.hidden = false;
-          submitButton.disabled = false;
-          return;
+          const claimRole = claims["custom:role"] === "super_admin" ? "admin" : (roleRoutes[claims["custom:role"]] ? claims["custom:role"] : "admin");
+          user = { id: `user-${claims.sub}`, name: claims.name || data.email.trim(), email: data.email.trim().toLowerCase(), role: claimRole, title: "", techName: "", active: true, employeeId: "", shopId: claims["custom:shopId"] || "" };
+          state.users.push(user);
         }
         sessionStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Date.now() + tokens.ExpiresIn * 1e3 }));
         state.currentUserId = user.id;
