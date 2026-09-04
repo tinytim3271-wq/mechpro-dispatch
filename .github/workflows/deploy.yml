@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: mechpro-${{ github.ref }}
@@ -51,6 +52,6 @@ jobs:
       - run: npm ci
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}
           aws-region: us-east-1
-      - run: npx cdk deploy --all --require-approval never --strict
+      - run: npx cdk deploy --all --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}

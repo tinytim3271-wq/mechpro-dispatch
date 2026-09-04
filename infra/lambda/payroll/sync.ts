@@ -1,7 +1,7 @@
 import { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, TABLE_NAME } from '../common/ddb';
-import { requestContext, requireRole, AuthError } from '../common/auth';
+import { requestContext, requireActiveAccount, requireRole, AuthError } from '../common/auth';
 import { roundCurrency } from '../common/money';
 
 export interface Order {
@@ -63,6 +63,7 @@ export function buildPayrollEntries(orders: Order[], employees: Employee[], shop
 export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyResultV2> => {
   try {
     const ctx = requestContext(event);
+    await requireActiveAccount(ctx);
     requireRole(ctx, ['admin', 'office']);
     const pk = `SHOP#${ctx.shopId}`;
 

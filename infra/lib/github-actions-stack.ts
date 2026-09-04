@@ -1,10 +1,12 @@
 import { CfnOutput, Stack, StackProps } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
 export interface GitHubActionsStackProps extends StackProps {
   repository: string;
   subject?: string;
+  siteBuckets?: s3.IBucket[];
 }
 
 export class GitHubActionsStack extends Stack {
@@ -19,22 +21,34 @@ export class GitHubActionsStack extends Stack {
       url: 'https://token.actions.githubusercontent.com',
       clientIds: ['sts.amazonaws.com'],
     });
+    const subjectPattern = props.subject ?? `repo:${props.repository}:environment:production`;
     const principal = new iam.OpenIdConnectPrincipal(provider).withConditions({
       StringEquals: {
         'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
       },
       StringLike: {
-        'token.actions.githubusercontent.com:sub': props.subject ?? `repo:${props.repository}:environment:production`,
+        'token.actions.githubusercontent.com:sub': subjectPattern,
       },
     });
     const role = new iam.Role(this, 'DeployRole', {
       roleName: 'MechProGitHubActionsDeployRole',
       assumedBy: principal,
-      description: `CDK deployment role for ${props.repository} main branch`,
+      description: `CDK deployment role for ${props.repository} (${subjectPattern})`,
     });
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['sts:AssumeRole'],
       resources: [`arn:${this.partition}:iam::${this.account}:role/cdk-hnb659fds-*`],
+    }));
+    for (const bucket of props.siteBuckets ?? []) {
+      bucket.grantReadWrite(role, 'downloads/*');
+    }
+    role.addToPolicy(new iam.PolicyStatement({
+      actions: ['cloudfront:CreateInvalidation'],
+      resources: [`arn:${this.partition}:cloudfront::${this.account}:distribution/*`],
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      actions: ['cloudformation:DescribeStacks', 'cloudformation:DescribeStackResources'],
+      resources: [`arn:${this.partition}:cloudformation:${this.region}:${this.account}:stack/MechPro*/*`],
     }));
 
     new CfnOutput(this, 'RoleArn', { value: role.roleArn });

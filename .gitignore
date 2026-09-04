@@ -1,7 +1,13 @@
 node_modules/
 infra/node_modules/
+dist/
+diagnostics/j2534-service/publish/
+diagnostics/j2534-service/**/bin/
+diagnostics/j2534-service/**/obj/
 infra/cdk.out/
 infra/.cdk.staging/
+infra/cdk-outputs.json
+.playwright-mcp/
 *.log
 .env
 .env.*
