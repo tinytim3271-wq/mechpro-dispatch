@@ -102,10 +102,25 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: mechpro-windows-installer
           path: dist/windows
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}
+          aws-region: us-east-1
+      - name: Refresh GitHub Actions publish role permissions
+        working-directory: infra
+        run: |
+          npm ci
+          npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}
