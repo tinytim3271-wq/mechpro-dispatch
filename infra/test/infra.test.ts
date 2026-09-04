@@ -362,6 +362,7 @@ describe('payment integrity', () => {
 		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 301)).toBe(false);
 	});
 });
+
 describe('diagnostics coverage', () => {
 	const records = [
 		{

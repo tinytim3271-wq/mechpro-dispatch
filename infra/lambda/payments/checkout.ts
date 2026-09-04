@@ -60,13 +60,13 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     let lastEvaluatedKey: Record<string, unknown> | undefined;
     const payments: Record<string, unknown>[] = [];
+    const paymentPrefix = `PAYMENT#${invoiceNumber}#`;
     do {
       const page = await ddb.send(new QueryCommand({
         TableName: TABLE_NAME,
         KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
-        FilterExpression: 'invoiceNumber = :invoiceNumber',
-        ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#', ':invoiceNumber': invoiceNumber },
-        ProjectionExpression: 'invoiceNumber, amount, #status',
+        ExpressionAttributeValues: { ':pk': pk, ':prefix': paymentPrefix },
+        ProjectionExpression: 'amount, #status',
         ExpressionAttributeNames: { '#status': 'status' },
         ExclusiveStartKey: lastEvaluatedKey as any,
       }));
