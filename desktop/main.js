@@ -4,14 +4,37 @@ const diagnostics = require('./diagnostics-bridge');
 
 const trustedOrigins = new Set([
   'https://www.yourcarguy806.com',
+  'https://yourcarguy806.com',
   'https://njz0co209l.execute-api.us-east-1.amazonaws.com',
   'https://cognito-idp.us-east-1.amazonaws.com',
 ]);
 
+function isAppFileUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'file:') return false;
+    const appRoot = path.resolve(__dirname, '..');
+    const target = path.normalize(decodeURIComponent(url.pathname));
+    return target === path.join(appRoot, 'index.html') || target.startsWith(appRoot + path.sep);
+  } catch {
+    return false;
+  }
+}
+
 function isTrustedUrl(rawUrl) {
   try {
     const url = new URL(rawUrl);
-    return url.protocol === 'file:' || trustedOrigins.has(url.origin);
+    if (url.protocol === 'file:') return isAppFileUrl(rawUrl);
+    return trustedOrigins.has(url.origin);
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedExternalUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === 'https:' && trustedOrigins.has(url.origin);
   } catch {
     return false;
   }
@@ -61,7 +84,7 @@ function createWindow() {
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isTrustedUrl(url)) void shell.openExternal(url);
+    if (isTrustedExternalUrl(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   window.webContents.on('will-navigate', (event, url) => {
