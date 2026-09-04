@@ -35,6 +35,22 @@ export function isResettableShopRecord(item: Record<string, unknown>) {
   return !String(item.sk || '').startsWith('EMPLOYEE#');
 }
 
+async function allShopRecords(pk: string) {
+  const items: Record<string, unknown>[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const result = await ddb.send(new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: exclusiveStartKey,
+    }));
+    items.push(...(result.Items ?? []));
+    exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+  return items;
+}
+
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return {
     statusCode,
@@ -73,11 +89,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       return json(400, { message: 'Type DELETE ALL DATA to confirm the reset' });
     }
     const recordsToDelete = resetAll
-      ? (await ddb.send(new QueryCommand({
-        TableName: TABLE_NAME,
-        KeyConditionExpression: 'pk = :pk',
-        ExpressionAttributeValues: { ':pk': pk },
-      }))).Items?.filter(isResettableShopRecord) ?? []
+      ? (await allShopRecords(pk)).filter(isResettableShopRecord)
       : records;
 
     for (let index = 0; index < recordsToDelete.length; index += 25) {
