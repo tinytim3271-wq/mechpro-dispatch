@@ -1,0 +1,17 @@
+version: 1
+frontend:
+  phases:
+    build:
+      commands:
+        # Assemble a clean publish directory containing only the static site
+        # and the downloadable Android APK. No build step is required because
+        # the app is plain HTML/CSS/JS (the repo is the source of truth).
+        - mkdir -p public/downloads
+        - cp index.html app.js styles.css theme.css service-worker.js manifest.webmanifest mechpro-icon.svg public/
+        - cp downloads/MechPro.apk public/downloads/
+  artifacts:
+    baseDirectory: public
+    files:
+      - '**/*'
+  cache:
+    paths: []
