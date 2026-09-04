@@ -66,6 +66,10 @@ export class ApiStack extends Stack {
     const agentPhoneConfigureFn = nodeFn('AgentPhoneConfigureFn', 'ai/agentphone-configure.ts');
     agentPhoneConfigureFn.addEnvironment('API_URL', 'https://njz0co209l.execute-api.us-east-1.amazonaws.com');
     const presignCode = bundledLambdaCode(path.join(__dirname, '..', 'lambda', 'files/presign.ts'));
+    const presignEnv = {
+      TABLE_NAME: props.table.tableName,
+      FILES_BUCKET_NAME: props.filesBucket.bucketName,
+    };
     const presignUploadFn = new lambda.Function(this, 'PresignUploadFn', {
       code: presignCode,
       handler: 'index.handler',
@@ -74,7 +78,7 @@ export class ApiStack extends Stack {
       timeout: Duration.seconds(10),
       memorySize: 256,
       tracing: lambda.Tracing.ACTIVE,
-      environment: { FILES_BUCKET_NAME: props.filesBucket.bucketName },
+      environment: presignEnv,
     });
     const presignDownloadFn = new lambda.Function(this, 'PresignDownloadFn', {
       code: presignCode,
@@ -84,7 +88,7 @@ export class ApiStack extends Stack {
       timeout: Duration.seconds(10),
       memorySize: 256,
       tracing: lambda.Tracing.ACTIVE,
-      environment: { FILES_BUCKET_NAME: props.filesBucket.bucketName },
+      environment: presignEnv,
     });
     props.filesBucket.grantPut(presignUploadFn);
     props.filesBucket.grantRead(presignDownloadFn);
@@ -97,6 +101,12 @@ export class ApiStack extends Stack {
 
     for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn, diagnosticsAuditFn]) {
       props.table.grantReadWriteData(fn);
+    }
+    for (const fn of [diagnosticsCoverageFn, diagnosticsAuthFn]) {
+      fn.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['dynamodb:GetItem'],
+        resources: [props.table.tableArn],
+      }));
     }
     props.table.grantReadData(assistantFn);
     props.table.grantReadWriteData(agentPhoneWebhookFn);
@@ -168,7 +178,13 @@ export class ApiStack extends Stack {
       corsPreflight: {
         allowHeaders: ['Authorization', 'Content-Type', 'If-Match'],
         allowMethods: [apigwv2.CorsHttpMethod.ANY],
-        allowOrigins: ['*'], // tighten to the deployed CloudFront domain once known
+        // Browser SPA + local/dev origins. Bearer tokens still required on routes.
+        allowOrigins: [
+          'https://www.yourcarguy806.com',
+          'https://yourcarguy806.com',
+          'http://127.0.0.1:3000',
+          'http://localhost:3000',
+        ],
       },
     });
 

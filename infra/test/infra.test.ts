@@ -1,7 +1,8 @@
 import { buildPayrollEntries, weekPeriod } from '../lambda/payroll/sync';
 import { buildTaxReport, invoiceTaxBreakdown } from '../lambda/tax/report';
 import { creditAmount, ownerEmployeeProfile, validPassword, validShopId } from '../lambda/admin/accounts';
-import { deletionConflict, entityPrefix } from '../lambda/entities/handler';
+import { deletionConflict, entityPrefix, sanitizeClientPaymentWrite } from '../lambda/entities/handler';
+import { resolveRole } from '../lambda/common/auth';
 import { normalizeVinResult, validVin } from '../lambda/vehicles/decode';
 import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout';
 import { verifyStripeSignature } from '../lambda/payments/webhook';
@@ -99,6 +100,36 @@ describe('shop entity controls', () => {
 			{ sk: 'PAYMENT#payment-1', invoiceNumber: 'INV-1' },
 		])).toBeNull();
 		expect(deletionConflict('invoices', { number: 'INV-1' }, [])).toBeNull();
+	});
+
+	test('keeps Stripe-completed payments webhook-only on client writes', () => {
+		expect(sanitizeClientPaymentWrite({
+			id: 'cs_test_123',
+			processor: 'stripe',
+			status: 'completed',
+			processorTransactionId: 'cs_test_123',
+			amount: 50,
+		})).toMatchObject({ processor: 'stripe', status: 'pending' });
+		expect(sanitizeClientPaymentWrite({
+			id: 'payment-1',
+			method: 'cash',
+			status: 'completed',
+			amount: 25,
+		})).toMatchObject({ status: 'completed', method: 'cash' });
+		expect(sanitizeClientPaymentWrite({
+			id: 'payment-2',
+			status: 'bogus',
+		}).status).toBe('pending');
+	});
+});
+
+describe('auth role resolution', () => {
+	test('prefers Cognito groups and rejects unknown custom roles', () => {
+		expect(resolveRole({ 'cognito:groups': ['admin', 'technician'], 'custom:role': 'technician' })).toBe('admin');
+		expect(resolveRole({ 'cognito:groups': 'office,service_writer' })).toBe('office');
+		expect(resolveRole({ 'custom:role': 'super_admin' })).toBe('super_admin');
+		expect(resolveRole({ 'custom:role': 'root' })).toBe('technician');
+		expect(resolveRole({})).toBe('technician');
 	});
 });
 

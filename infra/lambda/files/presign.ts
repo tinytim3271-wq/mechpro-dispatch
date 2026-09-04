@@ -7,6 +7,13 @@ import { filesBucketName } from '../common/runtime-env';
 
 const s3 = new S3Client({});
 const BUCKET_NAME = filesBucketName();
+const ALLOWED_UPLOAD_TYPES: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/webp': 'webp',
+};
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
@@ -23,8 +30,9 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     await requireActiveAccount(ctx);
     const body = JSON.parse(event.body || '{}');
     const kind = String(body.kind || 'file').replace(/[^a-z0-9-]/gi, '');
-    const contentType = String(body.contentType || 'application/octet-stream');
-    const extension = contentType.includes('png') ? 'png' : contentType.includes('pdf') ? 'pdf' : 'bin';
+    const contentType = String(body.contentType || 'application/octet-stream').toLowerCase().split(';')[0].trim();
+    const extension = ALLOWED_UPLOAD_TYPES[contentType];
+    if (!extension) return json(400, { message: 'Only PDF and common image uploads are allowed' });
     const key = `shops/${ctx.shopId}/${kind}/${randomUUID()}.${extension}`;
 
     const uploadUrl = await getSignedUrl(

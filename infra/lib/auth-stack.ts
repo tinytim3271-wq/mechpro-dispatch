@@ -27,6 +27,8 @@ export class AuthStack extends Stack {
       },
       customAttributes: {
         shopId: new cognito.StringAttribute({ minLen: 1, maxLen: 64, mutable: false }),
+        // Role is admin-API-only. Existing pools keep mutability; SPA writeAttributes
+        // below prevent clients from elevating their own custom:role claim.
         role: new cognito.StringAttribute({ minLen: 1, maxLen: 32, mutable: true }),
       },
       passwordPolicy: {
@@ -54,6 +56,12 @@ export class AuthStack extends Stack {
       generateSecret: false,
       preventUserExistenceErrors: true,
       accessTokenValidity: undefined,
+      // SPA may update profile fields only — never custom:shopId / custom:role.
+      readAttributes: new cognito.ClientAttributes()
+        .withStandardAttributes({ email: true, fullname: true, emailVerified: true })
+        .withCustomAttributes('shopId', 'role'),
+      writeAttributes: new cognito.ClientAttributes()
+        .withStandardAttributes({ email: true, fullname: true }),
     });
 
     new CfnOutput(this, 'UserPoolId', { value: this.userPool.userPoolId });

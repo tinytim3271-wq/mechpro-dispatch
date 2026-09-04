@@ -45,8 +45,13 @@ export class DataStack extends Stack {
       cors: [
         {
           allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET],
-          allowedOrigins: ['*'], // tighten to the deployed site origin once a fixed domain exists
-          allowedHeaders: ['*'],
+          allowedOrigins: [
+            'https://www.yourcarguy806.com',
+            'https://yourcarguy806.com',
+            'http://127.0.0.1:3000',
+            'http://localhost:3000',
+          ],
+          allowedHeaders: ['Content-Type', 'Content-Length'],
           maxAge: 3000,
         },
       ],

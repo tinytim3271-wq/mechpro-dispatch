@@ -42,6 +42,24 @@ const FINANCIAL_WRITE_ROLES: Record<string, string[]> = {
   expenses: ['admin', 'office'],
   payrollentries: ['admin'],
 };
+const MANUAL_PAYMENT_STATUSES = new Set(['pending', 'recorded', 'completed', 'failed', 'canceled']);
+
+/** Stripe-completed payments are webhook-only; clients may only create pending Stripe rows or manual receipts. */
+export function sanitizeClientPaymentWrite(body: Record<string, unknown>) {
+  const next = { ...body };
+  const processor = String(next.processor || '').toLowerCase();
+  const status = String(next.status || 'pending').toLowerCase();
+  const id = String(next.id || '');
+  if (id.startsWith('cs_') || id.startsWith('pi_') || processor === 'stripe') {
+    next.processor = 'stripe';
+    next.status = 'pending';
+    delete next.processorTransactionId;
+    return next;
+  }
+  next.status = MANUAL_PAYMENT_STATUSES.has(status) ? status : 'pending';
+  delete next.processorTransactionId;
+  return next;
+}
 
 function memberEmails(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -130,6 +148,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     if (method === 'POST') {
       let body = normalizeWave1EntityPayload(rawEntityType, JSON.parse(event.body || '{}'));
+      if (entityType === 'payments') body = sanitizeClientPaymentWrite(body);
       if (entityType === 'conversations') {
         const kind = String(body.kind || '');
         if (!['direct', 'group'].includes(kind)) return json(400, { message: 'Conversation kind must be direct or group' });
@@ -166,7 +185,8 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     }
 
     if (method === 'PUT' && id) {
-      const body = normalizeWave1EntityPayload(rawEntityType, JSON.parse(event.body || '{}'));
+      let body = normalizeWave1EntityPayload(rawEntityType, JSON.parse(event.body || '{}'));
+      if (entityType === 'payments') body = sanitizeClientPaymentWrite(body);
       if (entityType === 'chatmessages') return json(405, { message: 'Chat messages cannot be edited' });
       if (entityType === 'conversations') {
         const existing = await getEntity(pk, prefix, id);

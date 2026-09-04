@@ -9,11 +9,27 @@ export interface RequestContext {
   email: string;
 }
 
+const KNOWN_ROLES = new Set(['super_admin', 'admin', 'technician', 'office', 'service_writer']);
+
+/** Prefer Cognito groups when present; fall back to custom:role. Never trust client body fields. */
+export function resolveRole(claims: Record<string, unknown>): string {
+  const rawGroups = claims['cognito:groups'];
+  const groups = Array.isArray(rawGroups)
+    ? rawGroups.map(String)
+    : typeof rawGroups === 'string'
+      ? rawGroups.split(',').map(part => part.trim()).filter(Boolean)
+      : [];
+  const fromGroup = groups.find(group => KNOWN_ROLES.has(group));
+  if (fromGroup) return fromGroup;
+  const fromClaim = String(claims['custom:role'] || 'technician');
+  return KNOWN_ROLES.has(fromClaim) ? fromClaim : 'technician';
+}
+
 /** Every route is authorized by the Cognito JWT authorizer; shopId/role come from token claims, never from client input. */
 export function requestContext(event: APIGatewayProxyEventV2WithJWTAuthorizer): RequestContext {
   const claims = event.requestContext.authorizer.jwt.claims as Record<string, string>;
   const shopId = claims['custom:shopId'];
-  const role = claims['custom:role'] || 'technician';
+  const role = resolveRole(claims);
   const userId = claims['sub'];
   const email = String(claims['email'] || '').trim().toLowerCase();
   if (!shopId) throw new AuthError('Missing shopId claim on authenticated user');
