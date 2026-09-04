@@ -255,6 +255,26 @@ record_failure() {
   total_failures=$((total_failures + 1))
 }
 
+normalize_pr_list() {
+  local list_name="$1"
+  local csv="$2"
+  local -n output="$3"
+  output=()
+
+  IFS=',' read -r -a raw_values <<<"$csv"
+  for raw in "${raw_values[@]}"; do
+    local pr="${raw//[[:space:]]/}"
+    if [[ -z "$pr" ]]; then
+      continue
+    fi
+    if ! [[ "$pr" =~ ^[0-9]+$ ]]; then
+      log ERROR "Invalid PR number '$pr' in $list_name list"
+      exit 1
+    fi
+    output+=("$pr")
+  done
+}
+
 fetch_pr() {
   local pr="$1"
   api_request GET "/repos/$OWNER/$REPO/pulls/$pr"
@@ -363,23 +383,17 @@ log INFO "Draft PRs: $DRAFT_PRS"
 log INFO "Merge PRs: $MERGE_PRS"
 log INFO "Dry run: $DRY_RUN"
 
-IFS=',' read -r -a DRAFT_PR_ARRAY <<<"$DRAFT_PRS"
-IFS=',' read -r -a MERGE_PR_ARRAY <<<"$MERGE_PRS"
+declare -a DRAFT_PR_ARRAY=()
+declare -a MERGE_PR_ARRAY=()
+normalize_pr_list "draft-prs" "$DRAFT_PRS" DRAFT_PR_ARRAY
+normalize_pr_list "merge-prs" "$MERGE_PRS" MERGE_PR_ARRAY
 
 for pr in "${DRAFT_PR_ARRAY[@]}"; do
-  if [[ -z "${pr// }" ]]; then
-    continue
-  fi
-  pr="${pr//[[:space:]]/}"
   log INFO "Processing draft conversion for PR #$pr"
   convert_draft_pr "$pr"
 done
 
 for pr in "${MERGE_PR_ARRAY[@]}"; do
-  if [[ -z "${pr// }" ]]; then
-    continue
-  fi
-  pr="${pr//[[:space:]]/}"
   log INFO "Processing merge for PR #$pr"
   merge_pr "$pr"
 done

@@ -3,10 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, chmodSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const repoRoot = '/home/runner/work/mechpro-dispatch/mechpro-dispatch';
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const scriptPath = join(repoRoot, 'scripts/merge-open-prs.sh');
 
 function createMockCurl(dir) {
@@ -90,7 +91,7 @@ printf '%s' \"$status\"
   return mockCurlPath;
 }
 
-function runScript(extraEnv = {}) {
+function runScript({ extraEnv = {}, draftPrs = '3', mergePrs = '3' } = {}) {
   const sandbox = mkdtempSync(join(tmpdir(), 'merge-open-prs-test-'));
   createMockCurl(sandbox);
 
@@ -105,9 +106,9 @@ function runScript(extraEnv = {}) {
       '--token',
       'test-token',
       '--draft-prs',
-      '3',
+      draftPrs,
       '--merge-prs',
-      '3',
+      mergePrs,
       '--retry-delay',
       '0',
       '--max-retries',
@@ -140,9 +141,11 @@ test('retries transient failures and succeeds', () => {
   const retryFlagFile = join(tmpdir(), `merge-open-prs-retry-${Date.now()}`);
 
   const { result } = runScript({
-    MOCK_CURL_RETRY_FIRST_GET: 'true',
-    MOCK_CURL_COUNTER_FILE: counterFile,
-    MOCK_CURL_RETRY_FLAG_FILE: retryFlagFile,
+    extraEnv: {
+      MOCK_CURL_RETRY_FIRST_GET: 'true',
+      MOCK_CURL_COUNTER_FILE: counterFile,
+      MOCK_CURL_RETRY_FLAG_FILE: retryFlagFile,
+    },
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -151,4 +154,11 @@ test('retries transient failures and succeeds', () => {
 
   const requestCount = Number(readFileSync(counterFile, 'utf8').trim());
   assert.ok(requestCount >= 4);
+});
+
+test('returns non-zero with failure summary when API fetch fails', () => {
+  const { result } = runScript({ draftPrs: '', mergePrs: '99' });
+  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.match(result.stdout, /PR #99 fetch failed/);
+  assert.match(result.stdout, /Failures: 1/);
 });
