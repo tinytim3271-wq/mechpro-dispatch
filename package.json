@@ -85,11 +85,11 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
-    "electron": "^38.1.2",
+    "electron": "^39.8.10",
     "electron-builder": "^26.0.12"
   },
   "allowScripts": {
-    "electron@38.8.6": true,
+    "electron@39.8.10": true,
     "electron-winstaller@5.4.0": true
   }
 }
