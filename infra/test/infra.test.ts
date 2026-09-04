@@ -171,7 +171,7 @@ describe('deployment workflow', () => {
 	test('assumes the AWS deploy role from the main-branch deploy job', () => {
 		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy.yml'), 'utf8');
 		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
-		expect(workflow).not.toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
+		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
