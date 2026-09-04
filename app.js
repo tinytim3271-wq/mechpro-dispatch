@@ -605,7 +605,7 @@
   };
   function authSession() {
     try {
-      const session = JSON.parse(sessionStorage.getItem("mechpro-session"));
+      const session = JSON.parse(localStorage.getItem("mechpro-session") || sessionStorage.getItem("mechpro-session"));
       if (!session?.idToken) return null;
       const claims = decodeJwt(session.idToken), expiresAt = Number(claims.exp || 0) * 1e3;
       if (!expiresAt || expiresAt <= Date.now()) {
@@ -620,6 +620,7 @@
   }
   function clearAuthSession() {
     sessionStorage.removeItem("mechpro-session");
+    localStorage.removeItem("mechpro-session");
   }
   var MUTATION_QUEUE_STORE = "mechpro-mutation-queue-v1";
   var flushingMutationQueue = false;
@@ -2287,7 +2288,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
           submitButton.disabled = false;
           return;
         }
-        sessionStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Date.now() + tokens.ExpiresIn * 1e3 }));
+        localStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Date.now() + tokens.ExpiresIn * 1e3 }));
         state.currentUserId = user.id;
         state.route = roleRoutes[user.role][0];
         query = "";
@@ -2834,7 +2835,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
   };
   async function resolveAuthenticatedProfile(tokens, email) {
     const claims = decodeJwt(tokens.IdToken), normalized = String(claims.email || email).trim().toLowerCase(), role = claims["custom:role"], session = { idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 };
-    sessionStorage.setItem("mechpro-session", JSON.stringify(session));
+    localStorage.setItem("mechpro-session", JSON.stringify(session));
     if (role === "super_admin") return state.users.find((user) => String(user.email || "").trim().toLowerCase() === normalized);
     let employees2 = await apiFetch("/entities/employees"), profile = employees2.find((user) => user.active && String(user.email || "").trim().toLowerCase() === normalized);
     if (!profile && role === "admin") {
@@ -2861,7 +2862,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
         const tokens = await cognitoSignIn(data.email.trim(), data.password);
         if (isDesktopApp2) {
           const claims = decodeJwt(tokens.IdToken);
-          sessionStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 }));
+          localStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 }));
           await verifyDesktopEntitlement();
         }
         const user = await resolveAuthenticatedProfile(tokens, data.email);
