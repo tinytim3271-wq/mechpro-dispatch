@@ -181,6 +181,13 @@ describe('deployment workflow', () => {
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
+	test('refreshes the GitHub Actions stack before publishing Windows downloads', () => {
+		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'windows-desktop.yml'), 'utf8');
+		expect(workflow).toContain('- name: Refresh GitHub Actions publish role permissions');
+		expect(workflow).toContain('npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}');
+		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4\n(?:.*\n)*?\s+- name: Refresh GitHub Actions publish role permissions\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4\n(?:.*\n)*?\s+- name: Publish Windows installer to site bucket/);
+	});
+
 	test('keeps the GitHub Actions deploy role trust aligned to deploy and publish subjects', () => {
 		const app = new cdk.App();
 		const stack = new GitHubActionsStack(app, 'TestGitHubActionsStack', {
