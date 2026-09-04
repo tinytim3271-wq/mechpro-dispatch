@@ -17,6 +17,15 @@ function isTrustedUrl(rawUrl) {
   }
 }
 
+function isTrustedExternalUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === 'https:' && trustedOrigins.has(url.origin);
+  } catch {
+    return false;
+  }
+}
+
 function registerDiagnosticsIpc() {
   const handlers = {
     'diagnostics:listAdapters': () => diagnostics.listAdapters(),
@@ -61,7 +70,7 @@ function createWindow() {
   });
 
 window.webContents.setWindowOpenHandler(({ url }) => {
-  if (!url.startsWith('file:') && isTrustedUrl(url)) void shell.openExternal(url);
+  if (isTrustedExternalUrl(url)) void shell.openExternal(url);
   return { action: 'deny' };
 });
   window.webContents.on('will-navigate', (event, url) => {

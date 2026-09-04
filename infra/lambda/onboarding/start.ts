@@ -68,6 +68,22 @@ async function sampleRecords(pk: string) {
   return (result.Items ?? []).filter(isSampleRecord);
 }
 
+async function allShopRecords(pk: string) {
+  const items: Record<string, unknown>[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const result = await ddb.send(new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: exclusiveStartKey,
+    }));
+    items.push(...(result.Items ?? []));
+    exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+  return items;
+}
+
 export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyResultV2> => {
   try {
     const ctx = requestContext(event);

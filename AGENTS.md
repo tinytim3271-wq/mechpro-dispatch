@@ -4,7 +4,7 @@
 
 This repository has two independent parts:
 
-- **Frontend PWA** (repo root: `index.html`, `app.js`, `styles.css`, `service-worker.js`, `assets/`) — a vanilla-JS, local-first Progressive Web App for shop dispatch and work orders. There is **no build step and no `package.json`** at the root; it is served as static files. It boots straight into the dispatch board using seed data persisted in `localStorage` (`mechpro-dispatch-v1`) with an admin user already signed in, so no login is required for local development. The Cognito/API integration (`cognitoConfig` in `app.js`) is optional and fails gracefully offline.
+- **Frontend PWA** (repo root: `index.html`, `app.js`, `styles.css`, `service-worker.js`, `assets/`) — a vanilla-JS, local-first Progressive Web App for shop dispatch and work orders. There is **no build step for serving the PWA**; while a root `package.json` exists for Android/Windows packaging workflows, the frontend itself is served as static files. It boots straight into the dispatch board using seed data persisted in `localStorage` (`mechpro-dispatch-v1`) with an admin user already signed in, so no login is required for local development. The Cognito/API integration (`cognitoConfig` in `app.js`) is optional and fails gracefully offline.
 - **AWS CDK infra** (`infra/`) — a TypeScript CDK app (DynamoDB, Cognito, API Gateway, Lambda, S3). Standard commands are documented in `infra/README.md` and `infra/package.json` (`npm test`, `npm run build`, `npx cdk synth`). Actual `cdk deploy` requires AWS credentials and is out of scope for local dev.
 
 ### Toolchain / non-obvious gotchas

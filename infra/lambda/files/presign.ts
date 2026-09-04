@@ -7,6 +7,9 @@ import { filesBucketName } from '../common/runtime-env';
 
 const s3 = new S3Client({});
 const BUCKET_NAME = filesBucketName();
+if (!BUCKET_NAME) {
+  throw new Error('Missing files bucket configuration: set FILES_BUCKET_NAME or S3_BUCKET');
+}
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
