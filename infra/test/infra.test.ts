@@ -1,10 +1,11 @@
 import { buildPayrollEntries, weekPeriod } from '../lambda/payroll/sync';
 import { buildTaxReport, invoiceTaxBreakdown } from '../lambda/tax/report';
 import { creditAmount, ownerEmployeeProfile, validPassword, validShopId } from '../lambda/admin/accounts';
-import { deletionConflict, entityPrefix } from '../lambda/entities/handler';
+import { deletionConflict, entityPrefix, gsiSortKey } from '../lambda/entities/handler';
 import { normalizeVinResult, validVin } from '../lambda/vehicles/decode';
 import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout';
 import { verifyStripeSignature } from '../lambda/payments/webhook';
+import { paymentGsiSortKey } from '../lambda/payments/payment-key';
 import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
 import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
 import { matchCoverageRecord, evaluateEligibility } from '../lambda/diagnostics/coverage';
@@ -99,6 +100,15 @@ describe('shop entity controls', () => {
 			{ sk: 'PAYMENT#payment-1', invoiceNumber: 'INV-1' },
 		])).toBeNull();
 		expect(deletionConflict('invoices', { number: 'INV-1' }, [])).toBeNull();
+	});
+
+	test('indexes payments by invoice number in gsi1 sort key', () => {
+		expect(gsiSortKey('payments', { invoiceNumber: 'INV-1', createdAt: '2026-08-17T12:00:00.000Z' }, 'payment-1'))
+			.toBe('INV-1#2026-08-17T12:00:00.000Z#payment-1');
+		expect(gsiSortKey('payments', { createdAt: '2026-08-17T12:00:00.000Z' }, 'payment-2'))
+			.toBe('2026-08-17T12:00:00.000Z#payment-2');
+		expect(gsiSortKey('invoices', { createdAt: '2026-08-17T12:00:00.000Z' }, 'INV-1'))
+			.toBe('2026-08-17T12:00:00.000Z#INV-1');
 	});
 });
 
@@ -344,6 +354,13 @@ describe('payment integrity', () => {
 		const header = `t=${timestamp},v1=${signature}`;
 		expect(verifyStripeSignature(payload, header, 'secret', timestamp + 299)).toBe(true);
 		expect(verifyStripeSignature(payload, header, 'secret', timestamp + 301)).toBe(false);
+	});
+
+	test('stores Stripe payments with invoice-prefixed gsi sort keys', () => {
+		expect(paymentGsiSortKey('INV-7', '2026-08-17T12:00:00.000Z', 'pay_123'))
+			.toBe('INV-7#2026-08-17T12:00:00.000Z#pay_123');
+		expect(paymentGsiSortKey('', '2026-08-17T12:00:00.000Z', 'pay_456'))
+			.toBe('2026-08-17T12:00:00.000Z#pay_456');
 	});
 
 	test('verifies AgentPhone signatures and rejects stale deliveries', () => {

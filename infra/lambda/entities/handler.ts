@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { ddb, TABLE_NAME } from '../common/ddb';
 import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
 import { normalizeWave1EntityPayload, normalizeWave1EntityType } from '../../contracts/wave1-alignment';
+import { paymentGsiSortKey } from '../payments/payment-key';
 
 /** Entity types this generic CRUD handler serves. Each maps to a DynamoDB sort-key prefix. */
 const ENTITY_PREFIXES: Record<string, string> = {
@@ -42,6 +43,13 @@ const FINANCIAL_WRITE_ROLES: Record<string, string[]> = {
   expenses: ['admin', 'office'],
   payrollentries: ['admin'],
 };
+
+export function gsiSortKey(entityType: string, body: Record<string, unknown>, id: string): string {
+  if (entityType === 'payments' || entityType === 'PAYMENT') {
+    return paymentGsiSortKey(body.invoiceNumber, body.createdAt || body.date || id, id);
+  }
+  return `${body.date || body.createdAt || id}#${id}`;
+}
 
 function memberEmails(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -156,7 +164,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         pk,
         sk: `${prefix}#${newId}`,
         gsi1pk: `${pk}#TYPE#${prefix}`,
-        gsi1sk: `${body.date || body.createdAt || newId}#${newId}`,
+        gsi1sk: gsiSortKey(entityType!, body as Record<string, unknown>, String(newId)),
         shopId: ctx.shopId,
         createdBy: ctx.userId,
         updatedAt: new Date().toISOString(),
@@ -185,7 +193,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         pk,
         sk: `${prefix}#${id}`,
         gsi1pk: `${pk}#TYPE#${prefix}`,
-        gsi1sk: `${body.date || body.createdAt || id}#${id}`,
+        gsi1sk: gsiSortKey(entityType!, body as Record<string, unknown>, String(id)),
         shopId: ctx.shopId,
         updatedAt: new Date().toISOString(),
       };

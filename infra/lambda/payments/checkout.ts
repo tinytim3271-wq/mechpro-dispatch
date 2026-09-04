@@ -5,6 +5,7 @@ import { ddb, TABLE_NAME } from '../common/ddb';
 import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
 
 const secretsClient = new SecretsManagerClient({});
+const INVOICE_PAYMENT_GSI_ROLLOUT_AT = Date.parse('2026-09-04T00:00:00.000Z');
 
 export function openInvoiceBalance(invoiceAmount: unknown, payments: Record<string, unknown>[]): number {
   const paid = payments
@@ -29,6 +30,13 @@ export function headerValue(headers: Record<string, string | undefined> | undefi
     if (key.toLowerCase() === target) return value;
   }
   return undefined;
+}
+
+export function needsLegacyPaymentFallback(invoice: Record<string, unknown> | undefined): boolean {
+  const createdAt = String(invoice?.createdAt || '').trim();
+  if (!createdAt) return true;
+  const createdAtMillis = Date.parse(createdAt);
+  return Number.isNaN(createdAtMillis) || createdAtMillis < INVOICE_PAYMENT_GSI_ROLLOUT_AT;
 }
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
@@ -61,19 +69,36 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     let lastEvaluatedKey: Record<string, unknown> | undefined;
     const payments: Record<string, unknown>[] = [];
+    const invoicePaymentPrefix = `${String(invoiceNumber)}#`;
     do {
       const page = await ddb.send(new QueryCommand({
         TableName: TABLE_NAME,
-        KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
-        ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#', ':invoiceNumber': invoiceNumber },
+        IndexName: 'gsi1',
+        KeyConditionExpression: 'gsi1pk = :gsi1pk and begins_with(gsi1sk, :invoicePaymentPrefix)',
+        ExpressionAttributeValues: { ':gsi1pk': `${pk}#TYPE#PAYMENT`, ':invoicePaymentPrefix': invoicePaymentPrefix },
         ProjectionExpression: 'amount, #status',
         ExpressionAttributeNames: { '#status': 'status' },
-        FilterExpression: 'invoiceNumber = :invoiceNumber',
         ExclusiveStartKey: lastEvaluatedKey as any,
       }));
       lastEvaluatedKey = page.LastEvaluatedKey as any;
       payments.push(...(page.Items ?? []));
     } while (lastEvaluatedKey);
+    if (!payments.length && needsLegacyPaymentFallback(invoice as Record<string, unknown> | undefined)) {
+      let legacyLastEvaluatedKey: Record<string, unknown> | undefined;
+      do {
+        const legacyPage = await ddb.send(new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
+          ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#', ':invoiceNumber': invoiceNumber },
+          ProjectionExpression: 'invoiceNumber, amount, #status, gsi1sk',
+          ExpressionAttributeNames: { '#status': 'status' },
+          FilterExpression: 'invoiceNumber = :invoiceNumber',
+          ExclusiveStartKey: legacyLastEvaluatedKey as any,
+        }));
+        legacyLastEvaluatedKey = legacyPage.LastEvaluatedKey as any;
+        payments.push(...(legacyPage.Items ?? []));
+      } while (legacyLastEvaluatedKey);
+    }
     const balance = openInvoiceBalance(invoice.amount, payments);
     if (balance <= 0) return json(409, { message: 'Invoice has no open balance' });
 
