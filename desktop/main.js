@@ -60,10 +60,10 @@ function createWindow() {
     },
   });
 
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isTrustedUrl(url)) void shell.openExternal(url);
-    return { action: 'deny' };
-  });
+window.webContents.setWindowOpenHandler(({ url }) => {
+  if (!url.startsWith('file:') && isTrustedUrl(url)) void shell.openExternal(url);
+  return { action: 'deny' };
+});
   window.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedUrl(url)) event.preventDefault();
   });
