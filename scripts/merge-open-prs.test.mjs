@@ -42,6 +42,11 @@ fi
 endpoint=\"$url\"
 endpoint=\"\${endpoint#https://api.github.com}\"
 
+method_log_file=\"\${MOCK_CURL_METHOD_LOG_FILE:-}\"
+if [[ -n \"$method_log_file\" ]]; then
+  printf '%s %s\\n' \"$method\" \"$endpoint\" >> \"$method_log_file\"
+fi
+
 counter_file=\"\${MOCK_CURL_COUNTER_FILE:-}\"
 if [[ -n \"$counter_file\" ]]; then
   count=0
@@ -91,7 +96,7 @@ printf '%s' \"$status\"
   return mockCurlPath;
 }
 
-function runScript({ extraEnv = {}, draftPrs = '3', mergePrs = '3' } = {}) {
+function runScript({ extraEnv = {}, draftPrs = '3', mergePrs = '3', dryRun = false } = {}) {
   const sandbox = mkdtempSync(join(tmpdir(), 'merge-open-prs-test-'));
   createMockCurl(sandbox);
 
@@ -113,6 +118,7 @@ function runScript({ extraEnv = {}, draftPrs = '3', mergePrs = '3' } = {}) {
       '0',
       '--max-retries',
       '2',
+      ...(dryRun ? ['--dry-run'] : []),
     ],
     {
       cwd: repoRoot,
@@ -149,7 +155,7 @@ test('retries transient failures and succeeds', () => {
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /Transient HTTP 503, retrying attempt 1\/2/);
+  assert.match(result.stdout, /Transient HTTP 503, retrying 1\/2/);
   assert.match(result.stdout, /Failures: 0/);
 
   const requestCount = Number(readFileSync(counterFile, 'utf8').trim());
@@ -157,8 +163,34 @@ test('retries transient failures and succeeds', () => {
 });
 
 test('returns non-zero with failure summary when API fetch fails', () => {
-  const { result } = runScript({ draftPrs: '', mergePrs: '99' });
+  const { result } = runScript({ draftPrs: '3', mergePrs: '99' });
   assert.equal(result.status, 1, result.stderr || result.stdout);
   assert.match(result.stdout, /PR #99 fetch failed/);
   assert.match(result.stdout, /Failures: 1/);
+});
+
+test('fails fast when PR list includes non-numeric values', () => {
+  const { result } = runScript({ draftPrs: 'abc', mergePrs: '3' });
+  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.match(result.stdout, /Invalid PR number 'abc' in draft-prs list/);
+});
+
+test('dry-run logs planned mutations without calling PATCH or PUT', () => {
+  const methodLogFile = join(tmpdir(), `merge-open-prs-methods-${Date.now()}`);
+  const { result } = runScript({
+    dryRun: true,
+    extraEnv: { MOCK_CURL_METHOD_LOG_FILE: methodLogFile },
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /\[dry-run\] Would convert PR #3 from draft to ready/);
+  assert.match(result.stdout, /\[dry-run\] Would merge PR #3 using method 'merge'/);
+  assert.match(result.stdout, /Drafts converted: 0/);
+  assert.match(result.stdout, /Drafts that would convert \(dry-run\): 1/);
+  assert.match(result.stdout, /PRs merged: 0/);
+  assert.match(result.stdout, /PRs that would merge \(dry-run\): 1/);
+
+  const methodLog = readFileSync(methodLogFile, 'utf8');
+  assert.ok(!methodLog.includes('PATCH '), methodLog);
+  assert.ok(!methodLog.includes('PUT '), methodLog);
 });

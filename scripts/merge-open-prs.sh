@@ -16,9 +16,11 @@ DRY_RUN=false
 
 OWNER="${GITHUB_OWNER:-${OWNER:-}}"
 REPO="${GITHUB_REPO:-${REPO:-}}"
-if [[ -z "${OWNER}" || -z "${REPO}" ]]; then
-  if [[ -n "${GITHUB_REPOSITORY:-}" && "${GITHUB_REPOSITORY}" == */* ]]; then
+if [[ -n "${GITHUB_REPOSITORY:-}" && "${GITHUB_REPOSITORY}" == */* ]]; then
+  if [[ -z "${OWNER}" ]]; then
     OWNER="${GITHUB_REPOSITORY%%/*}"
+  fi
+  if [[ -z "${REPO}" ]]; then
     REPO="${GITHUB_REPOSITORY#*/}"
   fi
 fi
@@ -52,37 +54,55 @@ Examples:
 USAGE
 }
 
+require_option_arg() {
+  local option_name="$1"
+  local option_value="${2:-}"
+  if [[ -z "$option_value" || "$option_value" == --* ]]; then
+    echo "Missing value for $option_name" >&2
+    usage >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --owner)
+      require_option_arg "$1" "${2:-}"
       OWNER="${2:-}"
       shift 2
       ;;
     --repo)
+      require_option_arg "$1" "${2:-}"
       REPO="${2:-}"
       shift 2
       ;;
     --token)
+      require_option_arg "$1" "${2:-}"
       TOKEN="${2:-}"
       shift 2
       ;;
     --draft-prs)
+      require_option_arg "$1" "${2:-}"
       DRAFT_PRS="${2:-}"
       shift 2
       ;;
     --merge-prs)
+      require_option_arg "$1" "${2:-}"
       MERGE_PRS="${2:-}"
       shift 2
       ;;
     --merge-method)
+      require_option_arg "$1" "${2:-}"
       MERGE_METHOD="${2:-}"
       shift 2
       ;;
     --max-retries)
+      require_option_arg "$1" "${2:-}"
       MAX_RETRIES="${2:-}"
       shift 2
       ;;
     --retry-delay)
+      require_option_arg "$1" "${2:-}"
       RETRY_DELAY_SECONDS="${2:-}"
       shift 2
       ;;
@@ -152,10 +172,9 @@ api_request() {
   local method="$1"
   local endpoint="$2"
   local payload="${3:-}"
-  local attempt=0
+  local retries=0
 
   while :; do
-    attempt=$((attempt + 1))
     local body_file="$TMP_DIR/body-${RANDOM}.json"
     local status=""
     local curl_exit=0
@@ -188,11 +207,12 @@ api_request() {
       return 0
     fi
 
-    if [[ "$attempt" -le "$MAX_RETRIES" ]]; then
+    if [[ "$retries" -lt "$MAX_RETRIES" ]]; then
+      retries=$((retries + 1))
       if [[ "$curl_exit" -ne 0 ]]; then
-        log WARN "Request failed (curl exit $curl_exit), retrying attempt $attempt/$MAX_RETRIES: $method $endpoint"
+        log WARN "Request failed (curl exit $curl_exit), retrying $retries/$MAX_RETRIES: $method $endpoint"
       else
-        log WARN "Transient HTTP $status, retrying attempt $attempt/$MAX_RETRIES: $method $endpoint"
+        log WARN "Transient HTTP $status, retrying $retries/$MAX_RETRIES: $method $endpoint"
       fi
       sleep "$RETRY_DELAY_SECONDS"
       continue
@@ -241,9 +261,11 @@ PY
 }
 
 declare -i draft_converted=0
+declare -i draft_would_convert=0
 declare -i draft_already_ready=0
 declare -i draft_skipped_closed=0
 declare -i merge_success=0
+declare -i merge_would_merge=0
 declare -i merge_skipped_closed=0
 declare -i total_failures=0
 declare -a failure_details=()
@@ -258,8 +280,8 @@ record_failure() {
 normalize_pr_list() {
   local list_name="$1"
   local csv="$2"
-  local -n output="$3"
-  output=()
+  local output_var="$3"
+  local normalized=""
 
   IFS=',' read -r -a raw_values <<<"$csv"
   for raw in "${raw_values[@]}"; do
@@ -269,10 +291,17 @@ normalize_pr_list() {
     fi
     if ! [[ "$pr" =~ ^[0-9]+$ ]]; then
       log ERROR "Invalid PR number '$pr' in $list_name list"
-      exit 1
+      return 1
     fi
-    output+=("$pr")
+    if [[ -z "$normalized" ]]; then
+      normalized="$pr"
+    else
+      normalized="$normalized $pr"
+    fi
   done
+
+  printf -v "$output_var" '%s' "$normalized"
+  return 0
 }
 
 fetch_pr() {
@@ -311,7 +340,7 @@ convert_draft_pr() {
 
   if [[ "$DRY_RUN" == "true" ]]; then
     log INFO "[dry-run] Would convert PR #$pr from draft to ready"
-    draft_converted=$((draft_converted + 1))
+    draft_would_convert=$((draft_would_convert + 1))
     return
   fi
 
@@ -350,18 +379,32 @@ merge_pr() {
 
   if [[ "$DRY_RUN" == "true" ]]; then
     log INFO "[dry-run] Would merge PR #$pr using method '$MERGE_METHOD'"
-    merge_success=$((merge_success + 1))
+    merge_would_merge=$((merge_would_merge + 1))
     return
   fi
 
   local payload
-  payload="{\"merge_method\":\"$MERGE_METHOD\",\"commit_title\":\"Merge pull request #$pr\"}"
+  payload="$(python3 - "$MERGE_METHOD" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "merge_method": sys.argv[1],
+}))
+PY
+)"
   api_request PUT "/repos/$OWNER/$REPO/pulls/$pr/merge" "$payload"
 
-  if [[ "$API_LAST_STATUS" != "200" && "$API_LAST_STATUS" != "201" ]]; then
+  if [[ "$API_LAST_STATUS" != "200" && "$API_LAST_STATUS" != "201" && "$API_LAST_STATUS" != "204" ]]; then
     local message
     message="$(json_field "$API_LAST_BODY" message)"
     record_failure "PR #$pr merge failed (HTTP $API_LAST_STATUS): ${message:-unknown error}"
+    return
+  fi
+
+  if [[ "$API_LAST_STATUS" == "204" ]]; then
+    log INFO "Merged PR #$pr"
+    merge_success=$((merge_success + 1))
     return
   fi
 
@@ -385,8 +428,22 @@ log INFO "Dry run: $DRY_RUN"
 
 declare -a DRAFT_PR_ARRAY=()
 declare -a MERGE_PR_ARRAY=()
-normalize_pr_list "draft-prs" "$DRAFT_PRS" DRAFT_PR_ARRAY
-normalize_pr_list "merge-prs" "$MERGE_PRS" MERGE_PR_ARRAY
+
+DRAFT_PRS_NORMALIZED=""
+MERGE_PRS_NORMALIZED=""
+if ! normalize_pr_list "draft-prs" "$DRAFT_PRS" DRAFT_PRS_NORMALIZED; then
+  exit 1
+fi
+if ! normalize_pr_list "merge-prs" "$MERGE_PRS" MERGE_PRS_NORMALIZED; then
+  exit 1
+fi
+
+if [[ -n "$DRAFT_PRS_NORMALIZED" ]]; then
+  IFS=' ' read -r -a DRAFT_PR_ARRAY <<<"$DRAFT_PRS_NORMALIZED"
+fi
+if [[ -n "$MERGE_PRS_NORMALIZED" ]]; then
+  IFS=' ' read -r -a MERGE_PR_ARRAY <<<"$MERGE_PRS_NORMALIZED"
+fi
 
 for pr in "${DRAFT_PR_ARRAY[@]}"; do
   log INFO "Processing draft conversion for PR #$pr"
@@ -401,9 +458,11 @@ done
 echo
 log INFO "Summary"
 log INFO "  Drafts converted: $draft_converted"
+log INFO "  Drafts that would convert (dry-run): $draft_would_convert"
 log INFO "  Drafts already ready: $draft_already_ready"
 log INFO "  Draft conversions skipped (not open): $draft_skipped_closed"
 log INFO "  PRs merged: $merge_success"
+log INFO "  PRs that would merge (dry-run): $merge_would_merge"
 log INFO "  Merges skipped (not open): $merge_skipped_closed"
 log INFO "  Failures: $total_failures"
 
