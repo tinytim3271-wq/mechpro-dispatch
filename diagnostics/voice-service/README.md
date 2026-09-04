@@ -81,7 +81,7 @@ Workbench panel to paste the transcript directly.
 ## Running tests
 
 ```bash
-python3 -m pytest diagnostics/voice-service/tests/ -v
-# or without pytest:
 python3 diagnostics/voice-service/tests/test_voice_service.py
+# optional if pytest is installed:
+python3 -m pytest diagnostics/voice-service/tests/ -v
 ```
