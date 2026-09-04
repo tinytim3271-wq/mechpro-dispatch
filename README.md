@@ -188,6 +188,17 @@ npm run build:web
 `npm run build:web` runs `sync:config` automatically. Committed defaults live in
 `infra/cdk-outputs.example.json` when `cdk-outputs.json` is absent (local dev).
 
+### PR automation helper
+
+To convert configured draft PRs to ready-for-review and then merge configured open PRs:
+
+```bash
+GITHUB_TOKEN=... GITHUB_REPOSITORY=tinytim3271-wq/mechpro-dispatch npm run merge:open-prs
+```
+
+Use `bash scripts/merge-open-prs.sh --help` for all options (owner/repo overrides, PR lists,
+merge method, retry settings, and `--dry-run`).
+
 | Variable | Purpose |
 |---|---|
 | `SHOP_TABLE` | DynamoDB single-table name |
