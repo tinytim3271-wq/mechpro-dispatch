@@ -24,11 +24,19 @@ new ApiStack(app, 'MechProApiStack', {
   userPoolClient: authStack.userPoolClient,
 });
 
-// Keep the interim bucket active until AWS verifies CloudFront access for this account.
+// Private staging bucket for CI; public traffic goes through CloudFront when the account is verified.
 const staticSiteStack = new StaticSiteStack(app, 'MechProStaticSiteStack', { env });
+
+// CloudFront may be blocked until AWS verifies the account. Skip with -c skipCdn=true.
+const skipCdn = String(app.node.tryGetContext('skipCdn')).toLowerCase() === 'true';
 let cdnStack: CdnStack | undefined;
-if (app.node.tryGetContext('enableCustomDomain') === true) {
-  cdnStack = new CdnStack(app, 'MechProCdnStack', { env, domainName: 'www.yourcarguy806.com' });
+if (!skipCdn) {
+  cdnStack = new CdnStack(app, 'MechProCdnStack', {
+    env,
+    domainName: String(app.node.tryGetContext('enableCustomDomain')).toLowerCase() === 'true'
+      ? 'www.yourcarguy806.com'
+      : undefined,
+  });
 }
 
 const githubRepository = app.node.tryGetContext('githubRepository');

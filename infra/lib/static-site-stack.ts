@@ -5,10 +5,8 @@ import { Construct } from 'constructs';
 import * as path from 'path';
 
 /**
- * Interim static hosting via S3 static website hosting (plain HTTP, no custom
- * domain/TLS, no WAF in front — S3 website endpoints don't support any of
- * those). Swap this for CdnStack (CloudFront) once the AWS account is
- * verified for CloudFront and the CDN stack can deploy.
+ * Private staging bucket for CI artifact publish. Public S3 website hosting
+ * was retired — serve the SPA through CdnStack (CloudFront + OAC) only.
  */
 export class StaticSiteStack extends Stack {
   readonly siteBucket: s3.Bucket;
@@ -17,15 +15,9 @@ export class StaticSiteStack extends Stack {
     super(scope, id, props);
 
     this.siteBucket = new s3.Bucket(this, 'MechProSiteBucket', {
-      blockPublicAccess: new s3.BlockPublicAccess({
-        blockPublicAcls: true,
-        ignorePublicAcls: true,
-        blockPublicPolicy: false,
-        restrictPublicBuckets: false,
-      }),
-      publicReadAccess: true,
-      websiteIndexDocument: 'index.html',
-      websiteErrorDocument: 'index.html', // SPA fallback for client-side routing
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
@@ -47,11 +39,12 @@ export class StaticSiteStack extends Stack {
         ],
       })],
       destinationBucket: this.siteBucket,
-      // Windows installer is published separately by CI into downloads/.
       exclude: ['downloads/*'],
     });
 
-    new CfnOutput(this, 'SiteUrl', { value: this.siteBucket.bucketWebsiteUrl });
     new CfnOutput(this, 'SiteBucketName', { value: this.siteBucket.bucketName });
+    new CfnOutput(this, 'SiteNote', {
+      value: 'Public website hosting retired — use MechProCdnStack CloudFront URL',
+    });
   }
 }

@@ -1,7 +1,7 @@
 import { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, TABLE_NAME } from '../common/ddb';
-import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
+import { requestContext, requireActiveAccount, requireRole, AuthError } from '../common/auth';
 import { roundCurrency } from '../common/money';
 
 export interface PaymentRecord {
@@ -80,6 +80,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
   try {
     const ctx = requestContext(event);
     await requireActiveAccount(ctx);
+    requireRole(ctx, ['admin', 'office']);
     const pk = `SHOP#${ctx.shopId}`;
     const from = event.queryStringParameters?.from;
     const to = event.queryStringParameters?.to;

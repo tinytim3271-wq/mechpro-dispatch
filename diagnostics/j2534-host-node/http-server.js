@@ -8,9 +8,14 @@ const { handleRequest } = require('./index');
 const PORT = Number(process.env.MECHPRO_J2534_HTTP_PORT || 39254);
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:3000');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Vary', 'Origin');
+  const origin = req.headers.origin;
+  if (origin === 'http://localhost:3000' || origin === 'http://127.0.0.1:3000') {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();

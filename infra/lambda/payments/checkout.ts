@@ -2,7 +2,7 @@ import { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from
 import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { ddb, TABLE_NAME } from '../common/ddb';
-import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
+import { requestContext, requireActiveAccount, requireRole, AuthError } from '../common/auth';
 
 const secretsClient = new SecretsManagerClient({});
 const INVOICE_PAYMENT_GSI_ROLLOUT_AT = Date.parse('2026-09-04T00:00:00.000Z');
@@ -54,6 +54,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
   try {
     const ctx = requestContext(event);
     await requireActiveAccount(ctx);
+    requireRole(ctx, ['admin', 'office', 'service_writer']);
     const pk = `SHOP#${ctx.shopId}`;
     const body = JSON.parse(event.body || '{}');
     const { invoiceNumber } = body;

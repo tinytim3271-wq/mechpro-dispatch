@@ -2,9 +2,12 @@ const net = require('node:net');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const os = require('node:os');
+const crypto = require('node:crypto');
 
-const PIPE_WIN = '\\\\.\\pipe\\mechpro-j2534';
-const PIPE_UNIX = path.join(os.tmpdir(), 'mechpro-j2534.sock');
+const sessionId = crypto.randomBytes(8).toString('hex');
+const hostToken = crypto.randomBytes(24).toString('base64url');
+const PIPE_WIN = `\\\\.\\pipe\\mechpro-j2534-${sessionId}`;
+const PIPE_UNIX = path.join(os.tmpdir(), `mechpro-j2534-${sessionId}.sock`);
 
 let hostProcess = null;
 let requestId = 0;
@@ -12,6 +15,10 @@ let powerSaveBlockerId = null;
 
 function pipePath() {
   return process.platform === 'win32' ? PIPE_WIN : PIPE_UNIX;
+}
+
+function csharpPipeName() {
+  return `mechpro-j2534-${sessionId}`;
 }
 
 function hostScriptPath() {
@@ -31,12 +38,21 @@ function startHostProcess() {
 
   const fs = require('node:fs');
   const csharp = csharpHostPath();
+  const hostEnv = {
+    ...process.env,
+    MECHPRO_J2534_PIPE: process.platform === 'win32' ? csharpPipeName() : pipePath(),
+    MECHPRO_J2534_TOKEN: hostToken,
+  };
   if (process.platform === 'win32' && fs.existsSync(csharp)) {
-    hostProcess = spawn(csharp, [], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    hostProcess = spawn(csharp, [], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      env: hostEnv,
+    });
   } else {
     hostProcess = spawn(process.execPath, [hostScriptPath()], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, MECHPRO_J2534_PIPE: pipePath() },
+      env: { ...hostEnv, MECHPRO_J2534_PIPE: pipePath() },
     });
   }
 
@@ -67,6 +83,7 @@ function rpcCall(method, params = {}) {
     const socket = net.createConnection(pipePath());
     const id = ++requestId;
     let buffer = '';
+    const payload = { ...params, authToken: hostToken };
 
     const timer = setTimeout(() => {
       socket.destroy();
@@ -74,7 +91,7 @@ function rpcCall(method, params = {}) {
     }, 15000);
 
     socket.on('connect', () => {
-      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params: payload })}\n`);
     });
 
     socket.on('data', (chunk) => {
@@ -112,7 +129,7 @@ async function listAdapters() {
 
 async function connect(params) {
   await ensureHost();
-  const result = await rpcCall('connect', params);
+  const result = await rpcCall('connect', params || {});
   if (powerSaveBlockerId === null) {
     const { powerSaveBlocker } = require('electron');
     powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
@@ -121,6 +138,7 @@ async function connect(params) {
 }
 
 async function disconnect() {
+  if (!hostProcess) return { connected: false };
   const result = await rpcCall('disconnect');
   if (powerSaveBlockerId !== null) {
     const { powerSaveBlocker } = require('electron');
@@ -131,9 +149,11 @@ async function disconnect() {
 }
 
 async function getConnectionStatus() {
+  if (!hostProcess) {
+    return { connected: false, adapterId: null, protocol: null, voltage: null, commFault: true };
+  }
   try {
-    await ensureHost();
-    return rpcCall('getConnectionStatus');
+    return await rpcCall('getConnectionStatus');
   } catch {
     return { connected: false, adapterId: null, protocol: null, voltage: null, commFault: true };
   }
@@ -154,9 +174,14 @@ async function readDtcs() {
   return rpcCall('readDtcs');
 }
 
-async function clearDtcs() {
+/** Mutating UDS — requires a cloud /diagnostics/authorize capability token from the renderer. */
+async function clearDtcs(params = {}) {
+  const authorizationToken = String(params.authorizationToken || '').trim();
+  if (!authorizationToken) {
+    throw new Error('clearDtcs requires an authorization token from /diagnostics/authorize');
+  }
   await ensureHost();
-  return rpcCall('clearDtcs');
+  return rpcCall('clearDtcs', { authorizationToken });
 }
 
 async function startLiveLog() {

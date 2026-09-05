@@ -26,7 +26,7 @@ function registerDiagnosticsIpc() {
     'diagnostics:readVin': () => diagnostics.readVin(),
     'diagnostics:identifyEcus': () => diagnostics.identifyEcus(),
     'diagnostics:readDtcs': () => diagnostics.readDtcs(),
-    'diagnostics:clearDtcs': () => diagnostics.clearDtcs(),
+    'diagnostics:clearDtcs': (_e, params) => diagnostics.clearDtcs(params || {}),
     'diagnostics:startLiveLog': () => diagnostics.startLiveLog(),
     'diagnostics:stopLiveLog': () => diagnostics.stopLiveLog(),
     'diagnostics:pollLiveLog': (_e, since) => diagnostics.pollLiveLog(since),
@@ -94,11 +94,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   registerDiagnosticsIpc();
-  if (process.platform === 'win32' || process.env.MECHPRO_START_J2534 === '1') {
-    diagnostics.ensureHost().catch((error) => {
-      console.error('[j2534] failed to start host:', error.message);
-    });
-  }
+  // Do not auto-start the J2534 host — start on first user-initiated diagnostics action.
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

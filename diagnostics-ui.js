@@ -273,7 +273,13 @@ async function oemReadDtcs() {
 
 async function oemClearDtcs() {
   if (!confirm('Clear stored diagnostic trouble codes? This may reset readiness monitors and should only be done after repairs are verified.')) return;
-  await oemDiagApi().clearDtcs();
+  const vin = loadOemDiagState().vehicleIdentification?.vin || 'UNKNOWNVIN0000000';
+  const auth = await apiFetch('/diagnostics/authorize', {
+    method: 'POST',
+    body: JSON.stringify({ vin, procedure: 'clear_dtcs' }),
+  });
+  if (!auth?.authorized || !auth.token) throw new Error(auth?.message || 'Clear DTC authorization denied');
+  await oemDiagApi().clearDtcs({ authorizationToken: auth.token });
   saveOemDiagState({ dtcs: [], lastError: null });
   toast('DTCs cleared');
 }

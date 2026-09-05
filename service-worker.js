@@ -1,8 +1,7 @@
-const CACHE_NAME = 'mechpro-shell-v16';
+const CACHE_NAME = 'mechpro-shell-v17';
 const SHELL_FILES = [
   './',
   './index.html',
-  './app.js',
   './diagnostics-ui.js',
   './styles.css',
   './theme.css',
@@ -24,6 +23,7 @@ const SHELL_FILES = [
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
+    // Cache shell assets except app.js so deploys are not sticky behind SW.
     await cache.addAll(SHELL_FILES);
     await self.skipWaiting();
   })());
@@ -42,6 +42,16 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Always network-first for the main app bundle — never long-cache app.js.
+  if (url.pathname.endsWith('/app.js') || url.pathname.endsWith('app.js')) {
+    event.respondWith(
+      fetch(request)
+        .then(response => response)
+        .catch(() => caches.match(request).then(cached => cached || new Response('', { status: 503, statusText: 'Offline' }))),
+    );
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(

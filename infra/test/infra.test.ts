@@ -2,6 +2,7 @@ import { buildPayrollEntries, weekPeriod } from '../lambda/payroll/sync';
 import { buildTaxReport, invoiceTaxBreakdown } from '../lambda/tax/report';
 import { creditAmount, ownerEmployeeProfile, validPassword, validShopId } from '../lambda/admin/accounts';
 import { deletionConflict, entityPrefix, gsiSortKey } from '../lambda/entities/handler';
+import { canReadEntity, canWriteEntity, redactEmployeeForRole } from '../lambda/entities/rbac';
 import { normalizeVinResult, validVin } from '../lambda/vehicles/decode';
 import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout';
 import { verifyStripeSignature } from '../lambda/payments/webhook';
@@ -87,6 +88,33 @@ describe('shop entity controls', () => {
 		expect(entityPrefix('appointments')).toBe('APPOINTMENT');
 		expect(entityPrefix('purchases')).toBe('PURCHASE');
 		expect(entityPrefix('not-a-real-entity')).toBeUndefined();
+	});
+
+	test('enforces within-shop RBAC for financial and payroll entities', () => {
+		expect(canWriteEntity('invoices', 'technician')).toBe(false);
+		expect(canWriteEntity('invoices', 'service_writer')).toBe(true);
+		expect(canWriteEntity('payrollentries', 'office')).toBe(false);
+		expect(canWriteEntity('payrollentries', 'admin')).toBe(true);
+		expect(canWriteEntity('shopsettings', 'technician')).toBe(false);
+		expect(canReadEntity('payrollentries', 'technician')).toBe(false);
+		expect(canReadEntity('payrollentries', 'office')).toBe(true);
+		expect(canWriteEntity('orders', 'technician')).toBe(true);
+	});
+
+	test('redacts employee compensation fields for technicians', () => {
+		const redacted = redactEmployeeForRole({
+			name: 'Alex',
+			email: 'alex@example.com',
+			payRate: 32,
+			address: '123 Main',
+			emergencyContact: 'Sam',
+			taxStatus: 'W-2',
+			role: 'technician',
+		}, 'technician');
+		expect(redacted.payRate).toBeUndefined();
+		expect(redacted.address).toBeUndefined();
+		expect(redacted.email).toBe('alex@example.com');
+		expect(redactEmployeeForRole({ payRate: 32 }, 'admin').payRate).toBe(32);
 	});
 
 	test('protects linked customers while allowing invoice deletion with payment history', () => {

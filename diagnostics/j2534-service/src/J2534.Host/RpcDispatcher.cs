@@ -5,10 +5,13 @@ namespace MechPro.J2534.Host;
 
 public static class RpcDispatcher
 {
+    static readonly string? HostToken = Environment.GetEnvironmentVariable("MECHPRO_J2534_TOKEN");
+
     public static async Task<JsonRpcResponse> DispatchAsync(JsonRpcRequest request, DiagnosticSession session)
     {
         try
         {
+            AssertAuth(request.Params);
             var result = request.Method switch
             {
                 "ping" => new { ok = true, simulator = session.IsSimulator },
@@ -31,6 +34,16 @@ public static class RpcDispatcher
         catch (Exception ex)
         {
             return JsonRpcResponse.Fail(request.Id, -32000, ex.Message);
+        }
+    }
+
+    static void AssertAuth(JsonElement? element)
+    {
+        if (string.IsNullOrEmpty(HostToken)) return;
+        if (element is null || !element.Value.TryGetProperty("authToken", out var token)
+            || token.GetString() != HostToken)
+        {
+            throw new UnauthorizedAccessException("Unauthorized J2534 RPC — invalid host token");
         }
     }
 

@@ -27,6 +27,8 @@ export class AuthStack extends Stack {
       },
       customAttributes: {
         shopId: new cognito.StringAttribute({ minLen: 1, maxLen: 64, mutable: false }),
+        // Mutable so shop admins can change roles; API still trusts JWT claims only.
+        // Employee role updates should sync via AdminUpdateUserAttributes (entities handler).
         role: new cognito.StringAttribute({ minLen: 1, maxLen: 32, mutable: true }),
       },
       passwordPolicy: {
@@ -36,6 +38,7 @@ export class AuthStack extends Stack {
         requireDigits: true,
         requireSymbols: true,
       },
+      // Admins should enroll TOTP; OPTIONAL keeps technician onboarding simple.
       mfa: cognito.Mfa.OPTIONAL,
       mfaSecondFactor: { sms: false, otp: true },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
@@ -49,11 +52,13 @@ export class AuthStack extends Stack {
       });
     }
 
+    // USER_PASSWORD_AUTH retained for the vanilla SPA (no Amplify/SRP SDK). Prefer SRP when the client migrates.
     this.userPoolClient = this.userPool.addClient('MechProSpaClient', {
       authFlows: { userSrp: true, userPassword: true },
       generateSecret: false,
       preventUserExistenceErrors: true,
       accessTokenValidity: undefined,
+      enableTokenRevocation: true,
     });
 
     new CfnOutput(this, 'UserPoolId', { value: this.userPool.userPoolId });

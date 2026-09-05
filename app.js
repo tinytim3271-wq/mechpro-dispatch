@@ -350,7 +350,7 @@
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   }
   async function uploadFileToS3(blob, kind, contentType) {
-    const { uploadUrl, key } = await apiFetch("/files/presign-upload", { method: "POST", body: JSON.stringify({ kind, contentType }) });
+    const { uploadUrl, key } = await apiFetch("/files/presign-upload", { method: "POST", body: JSON.stringify({ kind, contentType, contentLength: blob.size }) });
     const response = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: blob });
     if (!response.ok) throw new Error("Upload to storage failed");
     return key;
@@ -455,10 +455,10 @@
       { name: "Lubbock Floral", phone: "806-555-0168", email: "ops@lubbockfloral.com", vehicles: 4, visits: 15, spend: 8389.42 }
     ],
     users: [
-      { id: "user-admin", name: "Jordan Davis", email: "jordan@yourcarguy.com", role: "admin", title: "Service Manager", techName: "", active: true, employeeId: "EMP-001", phone: "806-555-0100", address: "4821 34th Street, Lubbock, TX 79410", startDate: "2022-03-14", employmentType: "Salary", payRate: 72e3, payFrequency: "Biweekly", department: "Management", emergencyContact: "Taylor Davis \xB7 806-555-0101", taxStatus: "W-2" },
-      { id: "user-tech", name: "Eli Rodriguez", email: "eli@yourcarguy.com", role: "technician", title: "Lead Technician", techName: "Eli R.", active: true, employeeId: "EMP-002", phone: "806-555-0102", address: "1904 82nd Street, Lubbock, TX 79423", startDate: "2023-01-09", employmentType: "Hourly", payRate: 32, payFrequency: "Weekly", department: "Service", emergencyContact: "Maria Rodriguez \xB7 806-555-0103", taxStatus: "W-2" },
-      { id: "user-office", name: "Megan Brooks", email: "megan@yourcarguy.com", role: "office", title: "Office Coordinator", techName: "", active: true, employeeId: "EMP-003", phone: "806-555-0104", address: "3108 58th Street, Lubbock, TX 79413", startDate: "2024-02-05", employmentType: "Hourly", payRate: 21, payFrequency: "Weekly", department: "Administration", emergencyContact: "Logan Brooks \xB7 806-555-0105", taxStatus: "W-2" },
-      { id: "user-writer", name: "Tara Stone", email: "tara@yourcarguy.com", role: "service_writer", title: "Service Writer", techName: "", active: true, employeeId: "EMP-004", phone: "806-555-0106", address: "702 98th Street, Lubbock, TX 79424", startDate: "2023-08-21", employmentType: "Hourly", payRate: 24, payFrequency: "Weekly", department: "Front Counter", emergencyContact: "Greg Stone \xB7 806-555-0107", taxStatus: "W-2" }
+      { id: "user-admin", name: "Demo Admin", email: "admin@example.com", role: "admin", title: "Service Manager", techName: "", active: true, employeeId: "EMP-001", phone: "555-0100", address: "", startDate: "2022-03-14", employmentType: "Salary", payRate: 0, payFrequency: "Biweekly", department: "Management", emergencyContact: "", taxStatus: "W-2" },
+      { id: "user-tech", name: "Demo Technician", email: "tech@example.com", role: "technician", title: "Lead Technician", techName: "Tech A", active: true, employeeId: "EMP-002", phone: "555-0102", address: "", startDate: "2023-01-09", employmentType: "Hourly", payRate: 0, payFrequency: "Weekly", department: "Service", emergencyContact: "", taxStatus: "W-2" },
+      { id: "user-office", name: "Demo Office", email: "office@example.com", role: "office", title: "Office Coordinator", techName: "", active: true, employeeId: "EMP-003", phone: "555-0104", address: "", startDate: "2024-02-05", employmentType: "Hourly", payRate: 0, payFrequency: "Weekly", department: "Administration", emergencyContact: "", taxStatus: "W-2" },
+      { id: "user-writer", name: "Demo Writer", email: "writer@example.com", role: "service_writer", title: "Service Writer", techName: "", active: true, employeeId: "EMP-004", phone: "555-0106", address: "", startDate: "2023-08-21", employmentType: "Hourly", payRate: 0, payFrequency: "Weekly", department: "Front Counter", emergencyContact: "", taxStatus: "W-2" }
     ],
     currentUserId: "user-admin",
     conversations: [],
@@ -605,12 +605,17 @@
   };
   function authSession() {
     try {
-      const session = JSON.parse(localStorage.getItem("mechpro-session") || sessionStorage.getItem("mechpro-session"));
+      const raw = sessionStorage.getItem("mechpro-session") || localStorage.getItem("mechpro-session");
+      const session = JSON.parse(raw || "null");
       if (!session?.idToken) return null;
       const claims = decodeJwt(session.idToken), expiresAt = Number(claims.exp || 0) * 1e3;
       if (!expiresAt || expiresAt <= Date.now()) {
         clearAuthSession();
         return null;
+      }
+      if (localStorage.getItem("mechpro-session")) {
+        sessionStorage.setItem("mechpro-session", JSON.stringify(session));
+        localStorage.removeItem("mechpro-session");
       }
       return { ...session, claims };
     } catch {
@@ -623,6 +628,7 @@
     localStorage.removeItem("mechpro-session");
   }
   var MUTATION_QUEUE_STORE = "mechpro-mutation-queue-v1";
+  var OFFLINE_QUEUE_BLOCKED = /\/entities\/(employees|payrollentries|shopsettings|invoices|payments|expenses)(\/|$)/i;
   var flushingMutationQueue = false;
   function readMutationQueue() {
     try {
@@ -638,11 +644,13 @@
     return globalThis.crypto?.randomUUID?.() || `mutation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
   function prepareEntityMutation(path, options) {
-    const method = String(options.method || "GET").toUpperCase(), queueable = path.startsWith("/entities/") && ["POST", "PUT", "DELETE"].includes(method);
-    if (!queueable) return { path, options, queueable };
+    const method = String(options.method || "GET").toUpperCase();
+    const isEntityMutation = path.startsWith("/entities/") && ["POST", "PUT", "DELETE"].includes(method);
+    const queueable = isEntityMutation && !OFFLINE_QUEUE_BLOCKED.test(path);
+    if (!queueable) return { path, options, queueable: false };
     let body = options.body ? JSON.parse(options.body) : null;
     if (method === "POST" && body && !body.id) body = { ...body, id: mutationId() };
-    return { path, options: { ...options, method, body: body ? JSON.stringify(body) : void 0 }, queueable, expectedUpdatedAt: method === "PUT" ? body?.updatedAt : null, key: method === "POST" ? `${path}/${body.id}` : path };
+    return { path, options: { ...options, method, body: body ? JSON.stringify(body) : void 0 }, queueable: true, expectedUpdatedAt: method === "PUT" ? body?.updatedAt : null, key: method === "POST" ? `${path}/${body.id}` : path };
   }
   function queueEntityMutation(mutation, conflict = false) {
     const queue = readMutationQueue(), existingIndex = queue.findIndex((item2) => item2.key === mutation.key);
@@ -943,7 +951,10 @@
     const session = authSession();
     if (!session || !desktopEntitlementVerified) return null;
     const email = String(session.claims.email || "").trim().toLowerCase();
-    return state.users.find((user) => user.id === state.currentUserId && user.active && user.email.toLowerCase() === email) || null;
+    const profile = state.users.find((user) => user.id === state.currentUserId && user.active && user.email.toLowerCase() === email) || null;
+    if (!profile) return null;
+    const jwtRole = session.claims["custom:role"];
+    return jwtRole && jwtRole !== profile.role ? { ...profile, role: jwtRole } : profile;
   }
   function canAccess(route) {
     return !!currentUser() && roleRoutes[currentUser().role].includes(route);
@@ -1895,7 +1906,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
     });
   }
   function employees() {
-    const rows = state.users.map((user) => `<tr><td><div class="employee-name"><span class="avatar">${initials(user.name)}</span><div><b>${user.name}</b><small>${user.employeeId || "Pending ID"} \xB7 ${user.email}</small></div></div></td><td>${roleLabel[user.role]}<small>${user.title || "No title"} \xB7 ${user.department || "Unassigned"}</small></td><td>${user.employmentType || "\u2014"}<small>${user.payFrequency || "\u2014"} \xB7 ${user.payRate ? user.employmentType === "Salary" ? money(user.payRate) + " / yr" : money(user.payRate) + " / hr" : "Rate pending"}</small></td><td>${user.phone || "\u2014"}<small>${user.startDate || "Start date pending"}</small></td><td><span class="badge ${user.active ? "paid" : "overdue"}">${user.active ? "Active" : "Inactive"}</span><small>${user.techName || "No dispatch identity"}</small></td><td><button class="mini-action" data-toggle-user="${user.id}" ${user.id === currentUser().id ? "disabled" : ""}>${user.active ? "Deactivate" : "Activate"}</button></td></tr>`).join("");
+    const rows = state.users.map((user) => `<tr><td><div class="employee-name"><span class="avatar">${initials(user.name)}</span><div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.employeeId || "Pending ID")} \xB7 ${escapeHtml(user.email)}</small></div></div></td><td>${escapeHtml(roleLabel[user.role])}<small>${escapeHtml(user.title || "No title")} \xB7 ${escapeHtml(user.department || "Unassigned")}</small></td><td>${escapeHtml(user.employmentType || "\u2014")}<small>${escapeHtml(user.payFrequency || "\u2014")} \xB7 ${user.payRate ? user.employmentType === "Salary" ? money(user.payRate) + " / yr" : money(user.payRate) + " / hr" : "Rate pending"}</small></td><td>${escapeHtml(user.phone || "\u2014")}<small>${escapeHtml(user.startDate || "Start date pending")}</small></td><td><span class="badge ${user.active ? "paid" : "overdue"}">${user.active ? "Active" : "Inactive"}</span><small>${escapeHtml(user.techName || "No dispatch identity")}</small></td><td><button class="mini-action" data-toggle-user="${escapeHtml(user.id)}" ${user.id === currentUser().id ? "disabled" : ""}>${user.active ? "Deactivate" : "Activate"}</button></td></tr>`).join("");
     return shell(`${heading("Team access", "Employees", "Employee records, employment details, payroll rates, and login access.", false)}<div class="employee-actions"><div class="access-note">${icon("shield-check", 15)} Admin sees all data. Technicians see only assigned jobs. Office sees customers, invoices, and accounting. Service writers manage service operations.</div><button class="primary" id="new-employee">${icon("user-plus", 15)} Create login</button></div><div class="data-panel"><table><thead><tr><th>Employee record</th><th>Role & department</th><th>Employment & pay</th><th>Contact & start</th><th>Access</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`);
   }
   function payroll() {
@@ -1908,8 +1919,8 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
     return { user, period, lines, hours, shiftHours, gross, federal, fica, other, net: Math.max(0, gross - federal - fica - other), salaryPay };
   }
   function payStubMarkup(stub) {
-    const user = stub.user, lines = stub.lines.map((line) => `<tr><td class="mono">${line.roNumber}</td><td>${line.customer}<small>${line.vehicle}</small></td><td>${line.hours.toFixed(2)}</td><td>${money(line.rate)}</td><td><b>${money(line.amount)}</b></td></tr>`).join("");
-    return `<section class="pay-stub"><div class="pay-stub-head"><div><div class="eyebrow">${user.employeeId || "Employee"} \xB7 ${user.department || "Department"}</div><h2>${user.name}</h2><p>${user.title} \xB7 ${user.employmentType || "Employment type"} \xB7 ${user.payRate ? user.employmentType === "Salary" ? money(user.payRate) + " / year" : money(user.payRate) + " / hr" : "Rate pending"}</p></div><div class="net-pay"><span>Net pay</span><strong>${money(stub.net)}</strong></div></div><div class="pay-stub-totals"><div><span>Job labor hours</span><b>${stub.hours.toFixed(2)}</b></div><div><span>Shift hours</span><b>${stub.shiftHours.toFixed(2)}</b></div><div><span>Gross pay</span><b>${money(stub.gross)}</b></div><div><span>Federal + FICA est.</span><b>(${money(stub.federal + stub.fica)})</b></div></div>${stub.salaryPay ? `<div class="salary-line">Weekly salary base: <b>${money(stub.salaryPay)}</b></div>` : ""}<table><thead><tr><th>Work order</th><th>Job</th><th>Hours</th><th>Rate</th><th>Pay</th></tr></thead><tbody>${lines || `<tr><td colspan="5">No completed job labor has been posted this week.</td></tr>`}</tbody></table><div class="pay-stub-foot"><span>Tax status: ${user.taxStatus || "Not set"}</span><span>Global shift clock is tracked separately to prevent duplicate pay.</span></div></section>`;
+    const user = stub.user, lines = stub.lines.map((line) => `<tr><td class="mono">${escapeHtml(line.roNumber)}</td><td>${escapeHtml(line.customer)}<small>${escapeHtml(line.vehicle)}</small></td><td>${line.hours.toFixed(2)}</td><td>${money(line.rate)}</td><td><b>${money(line.amount)}</b></td></tr>`).join("");
+    return `<section class="pay-stub"><div class="pay-stub-head"><div><div class="eyebrow">${escapeHtml(user.employeeId || "Employee")} \xB7 ${escapeHtml(user.department || "Department")}</div><h2>${escapeHtml(user.name)}</h2><p>${escapeHtml(user.title)} \xB7 ${escapeHtml(user.employmentType || "Employment type")} \xB7 ${user.payRate ? user.employmentType === "Salary" ? money(user.payRate) + " / year" : money(user.payRate) + " / hr" : "Rate pending"}</p></div><div class="net-pay"><span>Net pay</span><strong>${money(stub.net)}</strong></div></div><div class="pay-stub-totals"><div><span>Job labor hours</span><b>${stub.hours.toFixed(2)}</b></div><div><span>Shift hours</span><b>${stub.shiftHours.toFixed(2)}</b></div><div><span>Gross pay</span><b>${money(stub.gross)}</b></div><div><span>Federal + FICA est.</span><b>(${money(stub.federal + stub.fica)})</b></div></div>${stub.salaryPay ? `<div class="salary-line">Weekly salary base: <b>${money(stub.salaryPay)}</b></div>` : ""}<table><thead><tr><th>Work order</th><th>Job</th><th>Hours</th><th>Rate</th><th>Pay</th></tr></thead><tbody>${lines || `<tr><td colspan="5">No completed job labor has been posted this week.</td></tr>`}</tbody></table><div class="pay-stub-foot"><span>Tax status: ${escapeHtml(user.taxStatus || "Not set")}</span><span>Global shift clock is tracked separately to prevent duplicate pay.</span></div></section>`;
   }
   function openEmployee() {
     showModal(`<form class="modal wide" id="employee-form"><div class="modal-head"><h2>Create employee profile</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><h3>Identity & access</h3><div class="form-grid"><label>Employee name *<input name="name" required/></label><label>Employee ID *<input name="employeeId" placeholder="EMP-005" required/></label><label>Job title<input name="title" placeholder="e.g. Service Writer"/></label><label>Department<input name="department" placeholder="e.g. Service"/></label><label class="full">Email address *<input type="email" name="email" required/></label><label>Role<select name="role"><option value="technician">Technician</option><option value="office">Office</option><option value="service_writer">Service Writer</option><option value="admin">Admin</option></select></label><label class="full">Technician dispatch name <input name="techName" placeholder="Required for technicians, e.g. Eli R."/></label></div><h3>Employment information</h3><div class="form-grid"><label>Employment type<select name="employmentType"><option>Hourly</option><option>Salary</option><option>Contractor</option></select></label><label>Pay rate *<input name="payRate" type="number" min="0" step=".01" required/></label><label>Pay frequency<select name="payFrequency"><option>Weekly</option><option>Biweekly</option><option>Monthly</option></select></label><label>Start date<input name="startDate" type="date" value="2026-08-14"/></label><label>Tax status<select name="taxStatus"><option>W-2</option><option>1099 Contractor</option></select></label><label>Phone<input name="phone" type="tel"/></label><label class="full">Home address<input name="address"/></label><label class="full">Emergency contact<input name="emergencyContact" placeholder="Name \xB7 phone number"/></label></div><div class="ledger-note">${icon("info", 15)} Create the matching Cognito account before the employee signs in. Passwords are never stored in employee records.</div></div><div class="modal-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">${icon("user-plus", 14)} Create profile</button></div></form>`);
@@ -2281,13 +2292,14 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
       try {
         const tokens = await cognitoSignIn(data.email.trim(), data.password);
         const claims = decodeJwt(tokens.IdToken);
-        let user = state.users.find((item) => item.active && item.email.toLowerCase() === data.email.trim().toLowerCase());
+        const user = state.users.find((item) => item.active && item.email.toLowerCase() === data.email.trim().toLowerCase());
         if (!user) {
-          const claimRole = claims["custom:role"] === "super_admin" ? "admin" : (roleRoutes[claims["custom:role"]] ? claims["custom:role"] : "admin");
-          user = { id: `user-${claims.sub}`, name: claims.name || data.email.trim(), email: data.email.trim().toLowerCase(), role: claimRole, title: "", techName: "", active: true, employeeId: "", shopId: claims["custom:shopId"] || "" };
-          state.users.push(user);
+          errorEl.textContent = "Signed in, but no local employee profile matches this account yet.";
+          errorEl.hidden = false;
+          submitButton.disabled = false;
+          return;
         }
-        localStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Date.now() + tokens.ExpiresIn * 1e3 }));
+        sessionStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Date.now() + tokens.ExpiresIn * 1e3 }));
         state.currentUserId = user.id;
         state.route = roleRoutes[user.role][0];
         query = "";
@@ -2834,7 +2846,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
   };
   async function resolveAuthenticatedProfile(tokens, email) {
     const claims = decodeJwt(tokens.IdToken), normalized = String(claims.email || email).trim().toLowerCase(), role = claims["custom:role"], session = { idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 };
-    localStorage.setItem("mechpro-session", JSON.stringify(session));
+    sessionStorage.setItem("mechpro-session", JSON.stringify(session));
     if (role === "super_admin") return state.users.find((user) => String(user.email || "").trim().toLowerCase() === normalized);
     let employees2 = await apiFetch("/entities/employees"), profile = employees2.find((user) => user.active && String(user.email || "").trim().toLowerCase() === normalized);
     if (!profile && role === "admin") {
@@ -2861,7 +2873,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
         const tokens = await cognitoSignIn(data.email.trim(), data.password);
         if (isDesktopApp2) {
           const claims = decodeJwt(tokens.IdToken);
-          localStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 }));
+          sessionStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 }));
           await verifyDesktopEntitlement();
         }
         const user = await resolveAuthenticatedProfile(tokens, data.email);

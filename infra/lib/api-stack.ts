@@ -12,6 +12,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import { bundledLambdaCode } from './esbuild-asset';
+import { APP_ALLOWED_ORIGINS } from './allowed-origins';
 
 export interface ApiStackProps extends StackProps {
   table: dynamodb.Table;
@@ -39,6 +40,7 @@ export class ApiStack extends Stack {
       });
 
     const entitiesFn = nodeFn('EntitiesFn', 'entities/handler.ts');
+    entitiesFn.addEnvironment('USER_POOL_ID', props.userPool.userPoolId);
     const vehicleDecodeFn = nodeFn('VehicleDecodeFn', 'vehicles/decode.ts');
     const payrollSyncFn = nodeFn('PayrollSyncFn', 'payroll/sync.ts');
     const taxReportFn = nodeFn('TaxReportFn', 'tax/report.ts');
@@ -98,15 +100,28 @@ export class ApiStack extends Stack {
     for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn, diagnosticsAuditFn]) {
       props.table.grantReadWriteData(fn);
     }
+    entitiesFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:AdminUpdateUserAttributes', 'cognito-idp:ListUsers'],
+      resources: [props.userPool.userPoolArn],
+    }));
     props.table.grantReadData(assistantFn);
+    props.table.grantWriteData(assistantFn);
     props.table.grantReadWriteData(agentPhoneWebhookFn);
     assistantFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel'],
-      resources: ['*'],
+      resources: [
+        `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.amazon.nova-lite-v1:0`,
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+        'arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0',
+      ],
     }));
     agentPhoneWebhookFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel'],
-      resources: ['*'],
+      resources: [
+        `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.amazon.nova-lite-v1:0`,
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+        'arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0',
+      ],
     }));
     agentPhoneWebhookFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['secretsmanager:GetSecretValue'],
@@ -168,7 +183,7 @@ export class ApiStack extends Stack {
       corsPreflight: {
         allowHeaders: ['Authorization', 'Content-Type', 'If-Match'],
         allowMethods: [apigwv2.CorsHttpMethod.ANY],
-        allowOrigins: ['*'], // tighten to the deployed CloudFront domain once known
+        allowOrigins: APP_ALLOWED_ORIGINS,
       },
     });
 
