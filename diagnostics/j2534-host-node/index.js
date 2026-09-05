@@ -74,7 +74,7 @@ function dispatch(method, params) {
     case 'readDtcs':
       return readDtcs();
     case 'clearDtcs':
-      return clearDtcs();
+      return clearDtcs(params);
     case 'startLiveLog':
       if (!sim?.connected) throw new Error('Not connected to vehicle bus');
       sim.liveLogActive = true;
@@ -261,7 +261,9 @@ function readDtcs() {
   };
 }
 
-function clearDtcs() {
+function clearDtcs(params = {}) {
+  const { verifyClearDtcsToken } = require('./capability-token');
+  verifyClearDtcsToken(params.authorizationToken);
   requireConnection();
   logEntry('tx', '0x7E0', '14FFFFFF', 'Clear DTCs (UDS 0x14 FF FF FF)');
   logEntry('rx', '0x7E8', '54', 'DTCs cleared');

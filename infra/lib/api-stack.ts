@@ -60,6 +60,10 @@ export class ApiStack extends Stack {
     const diagnosticsCoverageFn = nodeFn('DiagnosticsCoverageFn', 'diagnostics/coverage.ts');
     const diagnosticsAuditFn = nodeFn('DiagnosticsAuditFn', 'diagnostics/audit.ts');
     const diagnosticsAuthFn = nodeFn('DiagnosticsAuthFn', 'diagnostics/auth-proxy.ts');
+    const diagnosticsCapabilitySecret = String(
+      this.node.tryGetContext('diagnosticsCapabilitySecret') || 'mechpro-dev-diagnostics-capability-v1',
+    );
+    diagnosticsAuthFn.addEnvironment('DIAGNOSTICS_CAPABILITY_SECRET', diagnosticsCapabilitySecret);
     const webhookFn = nodeFn('StripeWebhookFn', 'payments/webhook.ts');
     const assistantFn = nodeFn('AssistantFn', 'ai/assistant.ts');
     assistantFn.addEnvironment('BEDROCK_MODEL_ID', 'us.amazon.nova-lite-v1:0');

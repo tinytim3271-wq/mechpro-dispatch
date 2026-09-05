@@ -1,6 +1,6 @@
 import { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { randomBytes } from 'node:crypto';
 import { requestContext, requireActiveAccount, requireRole, AuthError } from '../common/auth';
+import { mintClearDtcsToken } from './capability-token';
 
 const MUTATING_PROCEDURES = new Set([
   'clear_dtcs',
@@ -21,8 +21,8 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
 /**
  * Authorizes local J2534 mutating operations. OEM AutoAuth credential exchange
  * remains Phase 3 (Secrets Manager) — this endpoint never returns OEM secrets.
- * For clear_dtcs and similar shop-local mutations, returns a short-lived
- * capability token the desktop host must present.
+ * For clear_dtcs, returns a short-lived HMAC-signed capability token the desktop
+ * host must verify before clearing DTCs.
  */
 export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyResultV2> => {
   try {
@@ -46,16 +46,14 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       return json(400, { message: 'Unsupported procedure for local authorization' });
     }
 
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-    const token = randomBytes(24).toString('base64url');
+    const minted = mintClearDtcsToken({ vin, shopId: ctx.shopId });
     return json(200, {
       authorized: true,
       procedure: 'clear_dtcs',
       vin,
-      token,
-      expiresAt,
+      token: minted.token,
+      expiresAt: minted.expiresAt,
       shopId: ctx.shopId,
-      // Never echo OEM secrets — capability token is local-session only.
     });
   } catch (error) {
     if (error instanceof AuthError) return json(403, { message: error.message });

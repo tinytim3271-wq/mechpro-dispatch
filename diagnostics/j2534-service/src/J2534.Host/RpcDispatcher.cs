@@ -22,7 +22,7 @@ public static class RpcDispatcher
                 "readVin" => await session.ReadVinAsync(),
                 "identifyEcus" => await session.IdentifyEcusAsync(),
                 "readDtcs" => await session.ReadDtcsAsync(),
-                "clearDtcs" => await session.ClearDtcsAsync(),
+                "clearDtcs" => await ClearDtcs(request.Params, session),
                 "startLiveLog" => session.StartLiveLog(),
                 "stopLiveLog" => session.StopLiveLog(),
                 "pollLiveLog" => session.PollLiveLog(ParseSince(request.Params)),
@@ -35,6 +35,17 @@ public static class RpcDispatcher
         {
             return JsonRpcResponse.Fail(request.Id, -32000, ex.Message);
         }
+    }
+
+    static async Task<object> ClearDtcs(JsonElement? element, DiagnosticSession session)
+    {
+        string? authorizationToken = null;
+        if (element is not null && element.Value.TryGetProperty("authorizationToken", out var token))
+        {
+            authorizationToken = token.GetString();
+        }
+        CapabilityToken.VerifyClearDtcs(authorizationToken);
+        return await session.ClearDtcsAsync();
     }
 
     static void AssertAuth(JsonElement? element)

@@ -10,6 +10,7 @@ import { paymentGsiSortKey } from '../lambda/payments/payment-key';
 import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
 import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
 import { matchCoverageRecord, evaluateEligibility } from '../lambda/diagnostics/coverage';
+import { mintClearDtcsToken, verifyClearDtcsToken } from '../lambda/diagnostics/capability-token';
 import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/start';
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -400,6 +401,25 @@ describe('payment integrity', () => {
 		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 301)).toBe(false);
 	});
 });
+describe('diagnostics capability tokens', () => {
+	const prev = process.env.DIAGNOSTICS_CAPABILITY_SECRET;
+	beforeAll(() => {
+		process.env.DIAGNOSTICS_CAPABILITY_SECRET = 'test-capability-secret';
+	});
+	afterAll(() => {
+		if (prev === undefined) delete process.env.DIAGNOSTICS_CAPABILITY_SECRET;
+		else process.env.DIAGNOSTICS_CAPABILITY_SECRET = prev;
+	});
+
+	test('mints and verifies clear_dtcs tokens; rejects tampering', () => {
+		const { token } = mintClearDtcsToken({ vin: '1C6SRFHT0LN123456', shopId: 'shop-1' });
+		const payload = verifyClearDtcsToken(token, { vin: '1C6SRFHT0LN123456', shopId: 'shop-1' });
+		expect(payload.procedure).toBe('clear_dtcs');
+		expect(() => verifyClearDtcsToken(token.slice(0, -2) + 'aa')).toThrow(/signature/i);
+		expect(() => verifyClearDtcsToken('v1.not.valid')).toThrow(/Invalid diagnostics capability token/i);
+	});
+});
+
 describe('diagnostics coverage', () => {
 	const records = [
 		{
