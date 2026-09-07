@@ -3,7 +3,7 @@ import { buildTaxReport, invoiceTaxBreakdown } from '../lambda/tax/report';
 import { creditAmount, ownerEmployeeProfile, validPassword, validShopId } from '../lambda/admin/accounts';
 import { deletionConflict, entityPrefix } from '../lambda/entities/handler';
 import { normalizeVinResult, validVin } from '../lambda/vehicles/decode';
-import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout';
+import { openInvoiceBalance, originHeader, safeCheckoutUrl } from '../lambda/payments/checkout';
 import { verifyStripeSignature } from '../lambda/payments/webhook';
 import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
 import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
@@ -337,6 +337,13 @@ describe('payment integrity', () => {
 		expect(safeCheckoutUrl('https://attacker.example/paid', 'https://shop.example')).toBeNull();
 	});
 
+	test('reads Origin header case-insensitively', () => {
+		expect(originHeader({ origin: 'https://shop.example' })).toBe('https://shop.example');
+		expect(originHeader({ Origin: 'https://shop.example' })).toBe('https://shop.example');
+		expect(originHeader({ ORIGIN: 'https://shop.example' })).toBe('https://shop.example');
+		expect(originHeader({ host: 'api.example.com' })).toBeUndefined();
+	});
+
 	test('rejects stale Stripe signatures', () => {
 		const payload = '{"id":"evt_1"}';
 		const timestamp = 1_800_000_000;
@@ -355,6 +362,7 @@ describe('payment integrity', () => {
 		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 301)).toBe(false);
 	});
 });
+
 describe('diagnostics coverage', () => {
 	const records = [
 		{
