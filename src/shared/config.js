@@ -8,6 +8,8 @@ export const cognitoConfig = Object.freeze({
   userPoolId: 'us-east-1_Ng8TxYJkm',
   clientId: '3l8ocn4271f12hn6l0g30r8alc',
   apiUrl: 'https://njz0co209l.execute-api.us-east-1.amazonaws.com',
+  // Cloudflare auth endpoint — replaces Cognito for login/auth
+  authEndpoint: 'https://main.mechpro-dispatch.pages.dev/api/auth',
 });
 
 export const storageKeys = Object.freeze({
@@ -15,3 +17,10 @@ export const storageKeys = Object.freeze({
   session: 'mechpro-session',
   mutationQueue: 'mechpro-mutation-queue-v1',
 });
+
+// Must be set here (in config.js) so legacy.js can read it at module-evaluation time.
+// ES module imports hoist before module-body statements, so setting this in main.js
+// after `import './runtime/legacy.js'` would be too late in the esbuild IIFE bundle.
+if (typeof window !== 'undefined') {
+  window.__MECHPRO_CONFIG__ = { cognito: cognitoConfig, storage: storageKeys, authEndpoint: cognitoConfig.authEndpoint };
+}

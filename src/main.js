@@ -5,5 +5,5 @@
 import { cognitoConfig, storageKeys } from './shared/config.js';
 import './modules/register.js';
 
-window.__MECHPRO_CONFIG__ = { cognito: cognitoConfig, storage: storageKeys };
+// __MECHPRO_CONFIG__ is set in config.js (before legacy.js runs in esbuild IIFE order).
 import './runtime/legacy.js';

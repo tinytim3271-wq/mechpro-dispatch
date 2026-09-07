@@ -5,13 +5,18 @@
     region: "us-east-1",
     userPoolId: "us-east-1_Ng8TxYJkm",
     clientId: "3l8ocn4271f12hn6l0g30r8alc",
-    apiUrl: "https://njz0co209l.execute-api.us-east-1.amazonaws.com"
+    apiUrl: "https://njz0co209l.execute-api.us-east-1.amazonaws.com",
+    // Cloudflare auth endpoint — replaces Cognito for login/auth
+    authEndpoint: "https://main.mechpro-dispatch.pages.dev/api/auth"
   });
   var storageKeys = Object.freeze({
     dispatch: "mechpro-dispatch-v1",
     session: "mechpro-session",
     mutationQueue: "mechpro-mutation-queue-v1"
   });
+  if (typeof window !== "undefined") {
+    window.__MECHPRO_CONFIG__ = { cognito: cognitoConfig, storage: storageKeys, authEndpoint: cognitoConfig.authEndpoint };
+  }
 
   // src/modules/platform/detect.js
   var isDesktopApp = Boolean(window.mechproDesktop);
@@ -539,7 +544,8 @@
     return JSON.parse(decodeURIComponent(atob(payload).split("").map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0")).join("")));
   }
   async function cognitoSignIn(email, password) {
-    const response = await fetch(`https://cognito-idp.${cognitoConfig2.region}.amazonaws.com/`, { method: "POST", headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" }, body: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: cognitoConfig2.clientId, AuthParameters: { USERNAME: email, PASSWORD: password } }) });
+    const authUrl = cognitoConfig2.authEndpoint || `https://cognito-idp.${cognitoConfig2.region}.amazonaws.com/`;
+    const response = await fetch(authUrl, { method: "POST", headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" }, body: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: cognitoConfig2.clientId, AuthParameters: { USERNAME: email, PASSWORD: password } }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Sign-in failed");
     return data;
@@ -563,7 +569,8 @@
         }
         button.disabled = true;
         try {
-          const response = await fetch(`https://cognito-idp.${cognitoConfig2.region}.amazonaws.com/`, { method: "POST", headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.RespondToAuthChallenge" }, body: JSON.stringify({ ClientId: cognitoConfig2.clientId, ChallengeName: "NEW_PASSWORD_REQUIRED", Session: challenge.Session, ChallengeResponses: { USERNAME: challenge.ChallengeParameters.USER_ID_FOR_SRP || email, NEW_PASSWORD: data.password } }) }), result = await response.json();
+          const authUrl2 = cognitoConfig2.authEndpoint || `https://cognito-idp.${cognitoConfig2.region}.amazonaws.com/`;
+          const response = await fetch(authUrl2, { method: "POST", headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.RespondToAuthChallenge" }, body: JSON.stringify({ ClientId: cognitoConfig2.clientId, ChallengeName: "NEW_PASSWORD_REQUIRED", Session: challenge.Session, ChallengeResponses: { USERNAME: challenge.ChallengeParameters.USER_ID_FOR_SRP || email, NEW_PASSWORD: data.password } }) }), result = await response.json();
           if (!response.ok) throw new Error(result.message || "Password could not be set");
           closeModal();
           resolve(result.AuthenticationResult);
@@ -1737,7 +1744,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
     return shell(`${heading("Administration", "Shop settings", "Core business defaults used throughout MechPro.", false)}<div class="settings-panel"><div class="form-grid"><label>Shop name<input value="Your Car Guy"/></label><label>Phone<input value="806-555-0100"/></label><label class="full">Address<input value="4821 34th Street, Lubbock, TX 79410"/></label><label>Default labor rate<input value="$165.00 / hr"/></label><label>Sales tax<input value="8.25%"/></label><label>Service bays<input value="4"/></label><label>SMS notifications<select><option>Enabled</option><option>Disabled</option></select></label></div><button class="primary settings-save">${icon("save", 15)} Save settings</button></div><div class="settings-panel"><div class="statement-head"><div><div class="eyebrow">Tax filing</div><h2>Subscribing state & filing details</h2></div>${icon("landmark", 18)}</div><form class="form-grid" id="tax-settings-form"><label>Filing state *<select name="state" required>${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${t.taxId}" placeholder="e.g. 1-234-5678-9"/></label><label>Default sales tax rate % *<input name="rate" type="number" step=".01" min="0" value="${t.rate}" required/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary" type="submit">${icon("save", 14)} Save tax settings</button></div></form></div>`);
   }
   function loginScreen() {
-    return `<main class="login-screen"><section class="login-panel"><div class="brand login-brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders${isDesktopApp2 ? " \xB7 Windows" : ""}</small></div></div><div class="eyebrow">Secure team access</div><h1>Sign in to your workspace</h1><p>${isDesktopApp2 ? "An internet connection and active subscription are required." : "Use the employee login created by your Administrator."}</p><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required placeholder="you@yourcarguy.com"/></label><label>Password<input name="password" type="password" autocomplete="current-password" required placeholder="Password"/></label><p class="login-error" id="login-error" ${desktopLoginMessage ? "" : "hidden"}>${escapeHtml(desktopLoginMessage || "Incorrect email or password.")}</p><button class="primary" type="submit">${icon("log-in", 15)} Sign in</button></form><button class="login-reset" type="button" onclick="openPasswordReset()">Forgot password?</button>${isDesktopApp2 ? "" : `<div class="login-downloads"><a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.exe" download>Download MechPro installer (.exe)</a><a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.zip" download>Download portable zip</a></div>`}<div class="login-help"><strong>${isDesktopApp2 ? "Online subscription verification" : "Cognito-backed account"}</strong><span>${isDesktopApp2 ? "Access is checked at sign-in and while the app is running." : "Contact your Administrator if you need access."}</span></div></section></main>`;
+    return `<main class="login-screen"><section class="login-panel"><div class="brand login-brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders${isDesktopApp2 ? " \xB7 Windows" : ""}</small></div></div><div class="eyebrow">Secure team access</div><h1>Sign in to your workspace</h1><p>${isDesktopApp2 ? "An internet connection and active subscription are required." : "Use the employee login created by your Administrator."}</p><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required placeholder="you@yourcarguy.com"/></label><label>Password<input name="password" type="password" autocomplete="current-password" required placeholder="Password"/></label><p class="login-error" id="login-error" ${desktopLoginMessage ? "" : "hidden"}>${escapeHtml(desktopLoginMessage || "Incorrect email or password.")}</p><button class="primary" type="submit">${icon("log-in", 15)} Sign in</button></form><button class="login-reset" type="button" onclick="openPasswordReset()">Forgot password?</button><div class="login-help"><strong>${isDesktopApp2 ? "Online subscription verification" : "Cognito-backed account"}</strong><span>${isDesktopApp2 ? "Access is checked at sign-in and while the app is running." : "Contact your Administrator if you need access."}</span></div></section></main>`;
   }
   async function platformApi(path, options = {}) {
     const response = await authorizedApiRequest(path, options), body = await response.json().catch(() => ({}));
@@ -2283,19 +2290,26 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
         const claims = decodeJwt(tokens.IdToken);
         let user = state.users.find((item) => item.active && item.email.toLowerCase() === data.email.trim().toLowerCase());
         if (!user) {
-          const claimRole = claims["custom:role"] === "super_admin" ? "admin" : (roleRoutes[claims["custom:role"]] ? claims["custom:role"] : "admin");
-          user = { id: `user-${claims.sub}`, name: claims.name || data.email.trim(), email: data.email.trim().toLowerCase(), role: claimRole, title: "", techName: "", active: true, employeeId: "", shopId: claims["custom:shopId"] || "" };
+          const role = claims["custom:role"] === "super_admin" ? "admin" : claims["custom:role"], shopId = claims["custom:shopId"] || "default";
+          user = { id: "auto-" + claims.sub, shopId, name: claims.name || data.email.trim(), email: data.email.trim().toLowerCase(), role: role === "super_admin" ? "admin" : role || "technician", active: true, createdAt: now() };
           state.users.push(user);
         }
         localStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Date.now() + tokens.ExpiresIn * 1e3 }));
         state.currentUserId = user.id;
-        state.route = roleRoutes[user.role][0];
+        state.route = roleRoutes[user.role]?.[0] || "dispatch";
         query = "";
         save();
         await Promise.all([loadCustomersFromApi(), loadOrdersFromApi(), loadInvoicesFromApi(), loadPaymentsFromApi(), loadExpensesFromApi(), loadEstimatesFromApi(), loadShiftEntriesFromApi(), loadJobClockEntriesFromApi(), loadPayrollEntriesFromApi()]);
         render();
       } catch (error) {
-        errorEl.textContent = "Incorrect email or password.";
+        const msg = String(error.message || "").toLowerCase();
+        let display = "Incorrect email or password.";
+        if (msg.includes("not confirmed")) display = "Account not confirmed. Check your email for the activation link.";
+        else if (msg.includes("password attempt") || msg.includes("attempt limit") || msg.includes("too many")) display = "Too many failed attempts. Wait a few minutes and try again.";
+        else if (msg.includes("user not found") || msg.includes("user does not exist")) display = "No account found for this email address.";
+        else if (msg.includes("network") || msg.includes("failed to fetch") || msg.includes("load")) display = "Network error. Check your internet connection and try again.";
+        else if (msg.includes("invalid") || msg.includes("mismatch")) display = "Incorrect email or password.";
+        errorEl.textContent = display;
         errorEl.hidden = false;
         submitButton.disabled = false;
       }
@@ -2833,13 +2847,23 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     attachShopOperationsRoute();
   };
   async function resolveAuthenticatedProfile(tokens, email) {
-    const claims = decodeJwt(tokens.IdToken), normalized = String(claims.email || email).trim().toLowerCase(), role = claims["custom:role"], session = { idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 };
+    const claims = decodeJwt(tokens.IdToken), normalized = String(claims.email || email).trim().toLowerCase(), role = claims["custom:role"], mappedRole = role === "super_admin" ? "admin" : role || "technician", session = { idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 };
     localStorage.setItem("mechpro-session", JSON.stringify(session));
-    if (role === "super_admin") return state.users.find((user) => String(user.email || "").trim().toLowerCase() === normalized);
-    let employees2 = await apiFetch("/entities/employees"), profile = employees2.find((user) => user.active && String(user.email || "").trim().toLowerCase() === normalized);
-    if (!profile && role === "admin") {
-      profile = await apiFetch("/entities/employees", { method: "POST", body: JSON.stringify({ id: `owner-${claims["custom:shopId"]}`, name: claims.name || normalized.split("@")[0], email: normalized, role: "admin", title: "Owner", department: "Administration", active: true, createdAt: now() }) });
-      employees2 = [...employees2, profile];
+    let employees2 = null;
+    try {
+      employees2 = await apiFetch("/entities/employees");
+    } catch (e) {
+      employees2 = [];
+    }
+    let profile = employees2.find((user) => user.active && String(user.email || "").trim().toLowerCase() === normalized);
+    if (!profile && (mappedRole === "admin" || role === "super_admin")) {
+      try {
+        profile = await apiFetch("/entities/employees", { method: "POST", body: JSON.stringify({ id: `owner-${claims["custom:shopId"] || "default"}`, name: claims.name || normalized.split("@")[0], email: normalized, role: mappedRole, title: role === "super_admin" ? "Platform Owner" : "Owner", department: "Administration", active: true, createdAt: now() }) });
+        employees2 = [...employees2, profile];
+      } catch (e) {
+        profile = { id: `owner-${claims["custom:shopId"] || "default"}`, name: claims.name || normalized.split("@")[0], email: normalized, role: mappedRole, title: role === "super_admin" ? "Platform Owner" : "Owner", department: "Administration", active: true, shopId: claims["custom:shopId"] || "default", createdAt: now() };
+        employees2 = [...employees2, profile];
+      }
     }
     state.users = sanitizeUsers(employees2);
     return profile;
@@ -3473,7 +3497,4 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     }
   }, DESKTOP_ENTITLEMENT_INTERVAL2);
   void startApp();
-
-  // src/main.js
-  window.__MECHPRO_CONFIG__ = { cognito: cognitoConfig, storage: storageKeys };
 })();

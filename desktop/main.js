@@ -2,11 +2,18 @@ const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('node:path');
 const diagnostics = require('./diagnostics-bridge');
 
-const trustedOrigins = new Set([
-  'https://www.yourcarguy806.com',
-  'https://njz0co209l.execute-api.us-east-1.amazonaws.com',
-  'https://cognito-idp.us-east-1.amazonaws.com',
-]);
+function getTrustedOrigins() {
+  const defaults = new Set([
+    'https://www.yourcarguy806.com',
+    'https://yourcarguy806.com',
+  ]);
+  try {
+    const stored = localStorage.getItem('mechpro-trusted-origins');
+    if (stored) JSON.parse(stored).forEach(o => defaults.add(o));
+  } catch {}
+  return defaults;
+}
+const trustedOrigins = getTrustedOrigins();
 
 function isTrustedUrl(rawUrl) {
   try {

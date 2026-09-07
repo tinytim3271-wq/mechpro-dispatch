@@ -1,0 +1,11 @@
+name = "mechpro-dispatch"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
+
+[[kv_namespaces]]
+binding = "USERS_KV"
+id = "42f4f4890e5143cf92cfe08333b621e0"
+
+[[kv_namespaces]]
+binding = "SESSIONS_KV"
+id = "56a94b61a0d14d89b58f992a68f0c142"

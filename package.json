@@ -90,6 +90,10 @@
     "@capacitor/android": "^7.0.0",
     "@capacitor/core": "^7.0.0"
   },
+  "overrides": {
+    "rimraf": "^4.0.1",
+    "glob": "^7.2.3"
+  },
   "allowScripts": {
     "electron@40.10.6": true,
     "electron-winstaller@5.4.0": true
