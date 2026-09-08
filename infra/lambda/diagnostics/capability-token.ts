@@ -10,11 +10,26 @@ export type CapabilityPayload = {
 };
 
 function secret(): string {
-  return String(
+  const configured = String(
     process.env.DIAGNOSTICS_CAPABILITY_SECRET
     || process.env.MECHPRO_DIAG_CAPABILITY_SECRET
-    || 'mechpro-dev-diagnostics-capability-v1',
+    || '',
   ).trim();
+  const fallback = 'mechpro-dev-diagnostics-capability-v1';
+  const allowDev = process.env.ALLOW_DEV_DIAGNOSTICS_SECRET === '1';
+  const value = configured || (allowDev ? fallback : '');
+  if (!value) {
+    throw new Error('DIAGNOSTICS_CAPABILITY_SECRET is not configured');
+  }
+  // Refuse the shared dev default inside Lambda unless explicitly allowed.
+  if (
+    value === fallback
+    && process.env.AWS_LAMBDA_FUNCTION_NAME
+    && !allowDev
+  ) {
+    throw new Error('Refusing default diagnostics capability secret in Lambda');
+  }
+  return value;
 }
 
 function b64url(input: Buffer | string): string {

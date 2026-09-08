@@ -120,7 +120,7 @@ jobs:
         working-directory: infra
         run: |
           npm ci
-          npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}
+          npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }} -c diagnosticsCapabilitySecret=${{ secrets.DIAGNOSTICS_CAPABILITY_SECRET }}
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}

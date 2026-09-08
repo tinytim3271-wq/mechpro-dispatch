@@ -4,6 +4,7 @@ const diagnostics = require('./diagnostics-bridge');
 
 const trustedOrigins = new Set([
   'https://www.yourcarguy806.com',
+  'https://mechpro-dispatch.pages.dev',
   'https://njz0co209l.execute-api.us-east-1.amazonaws.com',
   'https://cognito-idp.us-east-1.amazonaws.com',
 ]);

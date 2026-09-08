@@ -44,7 +44,7 @@ jobs:
       - run: npm ci
       - run: npm test -- --runInBand
       - run: npm run build
-      - run: npx cdk synth --all --strict
+      - run: npx cdk synth --all --strict -c allowDevDiagnosticsSecret=true
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -69,11 +69,11 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}
           aws-region: us-east-1
-      - run: npx cdk deploy --all --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }} --outputs-file cdk-outputs.json
+      - run: npx cdk deploy --all --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }} -c diagnosticsCapabilitySecret=${{ secrets.DIAGNOSTICS_CAPABILITY_SECRET }} --outputs-file cdk-outputs.json
       - name: Rebuild web bundle from CDK outputs
         run: |
           cd ..
           npm ci
           npm run build:web
       - name: Refresh static site with updated app.js
-        run: npx cdk deploy MechProStaticSiteStack MechProCdnStack --require-approval never --strict -c enableCustomDomain=true
+        run: npx cdk deploy MechProStaticSiteStack MechProCdnStack --require-approval never --strict -c enableCustomDomain=true -c diagnosticsCapabilitySecret=${{ secrets.DIAGNOSTICS_CAPABILITY_SECRET }}

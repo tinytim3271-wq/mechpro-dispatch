@@ -1,0 +1,49 @@
+name: Cloudflare Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'styles.css'
+      - 'theme.css'
+      - 'service-worker.js'
+      - 'diagnostics-ui.js'
+      - 'manifest.webmanifest'
+      - 'assets/**'
+      - 'public/**'
+      - 'wrangler.toml'
+      - '.github/workflows/cloudflare-pages.yml'
+      - 'package.json'
+      - 'src/**'
+      - 'scripts/**'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: ${{ vars.CLOUDFLARE_PAGES_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:web
+      - name: Stage Pages publish directory
+        run: |
+          mkdir -p .pages-dist
+          cp index.html app.js styles.css theme.css service-worker.js diagnostics-ui.js manifest.webmanifest mechpro-icon.svg .pages-dist/
+          cp -r assets .pages-dist/assets
+          cp public/_headers public/_redirects .pages-dist/
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy .pages-dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'mechpro-dispatch' }} --commit-dirty=true

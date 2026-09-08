@@ -50,7 +50,12 @@ public static class RpcDispatcher
 
     static void AssertAuth(JsonElement? element)
     {
-        if (string.IsNullOrEmpty(HostToken)) return;
+        // Fail closed unless explicitly opted into unauthenticated local/dev hosts.
+        if (string.IsNullOrEmpty(HostToken))
+        {
+            if (Environment.GetEnvironmentVariable("MECHPRO_ALLOW_UNAUTHENTICATED_HOST") == "1") return;
+            throw new UnauthorizedAccessException("Unauthorized J2534 RPC — host token not configured");
+        }
         if (element is null || !element.Value.TryGetProperty("authToken", out var token)
             || token.GetString() != HostToken)
         {

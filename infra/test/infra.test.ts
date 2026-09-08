@@ -3,6 +3,7 @@ import { buildTaxReport, invoiceTaxBreakdown } from '../lambda/tax/report';
 import { creditAmount, ownerEmployeeProfile, validPassword, validShopId } from '../lambda/admin/accounts';
 import { deletionConflict, entityPrefix, gsiSortKey } from '../lambda/entities/handler';
 import { canReadEntity, canWriteEntity, redactEmployeeForRole } from '../lambda/entities/rbac';
+import { resolveRole } from '../lambda/common/auth';
 import { normalizeVinResult, validVin } from '../lambda/vehicles/decode';
 import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout';
 import { verifyStripeSignature } from '../lambda/payments/webhook';
@@ -141,6 +142,16 @@ describe('shop entity controls', () => {
 	});
 });
 
+describe('auth role resolution', () => {
+	test('prefers Cognito groups and rejects unknown custom roles', () => {
+		expect(resolveRole({ 'cognito:groups': ['admin', 'technician'], 'custom:role': 'technician' })).toBe('admin');
+		expect(resolveRole({ 'cognito:groups': 'office,service_writer' })).toBe('office');
+		expect(resolveRole({ 'custom:role': 'super_admin' })).toBe('super_admin');
+		expect(resolveRole({ 'custom:role': 'root' })).toBe('technician');
+		expect(resolveRole({})).toBe('technician');
+	});
+});
+
 describe('Wave 1 source compatibility', () => {
 	test('normalizes MechPro-AWS bookings into dispatch appointments', () => {
 		expect(normalizeWave1EntityType('bookings')).toBe('appointments');
@@ -207,24 +218,34 @@ describe('runtime env aliases', () => {
 });
 
 describe('deployment workflow', () => {
+	const readWorkflow = (name: string) =>
+		readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', name), 'utf8').replace(/\r\n/g, '\n');
+
 	test('assumes the AWS deploy role from the main-branch deploy job', () => {
-		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy.yml'), 'utf8');
+		const workflow = readWorkflow('deploy.yml');
 		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
+	test('keeps diagnostics capability secret out of CI synth and requires it on deploy', () => {
+		const workflow = readWorkflow('deploy.yml');
+		expect(workflow).toContain('npx cdk synth --all --strict -c allowDevDiagnosticsSecret=true');
+		expect(workflow).toContain('-c diagnosticsCapabilitySecret=${{ secrets.DIAGNOSTICS_CAPABILITY_SECRET }}');
+		expect(workflow).not.toMatch(/cdk deploy --all[^\n]*allowDevDiagnosticsSecret/);
+	});
+
 	test('uses the production environment before assuming the AWS role in Windows publish-download', () => {
-		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'windows-desktop.yml'), 'utf8');
+		const workflow = readWorkflow('windows-desktop.yml');
 		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
 	test('refreshes the GitHub Actions stack before publishing Windows downloads', () => {
-		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'windows-desktop.yml'), 'utf8');
+		const workflow = readWorkflow('windows-desktop.yml');
 		expect(workflow).toContain('- name: Refresh GitHub Actions publish role permissions');
-		expect(workflow).toContain('npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}');
+		expect(workflow).toContain('npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }} -c diagnosticsCapabilitySecret=${{ secrets.DIAGNOSTICS_CAPABILITY_SECRET }}');
 		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4\n(?:.*\n)*?\s+- name: Refresh GitHub Actions publish role permissions\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4\n(?:.*\n)*?\s+- name: Publish Windows installer to site bucket/);
 	});
 

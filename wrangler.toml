@@ -1,0 +1,8 @@
+# Cloudflare Pages project for the MechPro static PWA.
+# API, Cognito, DynamoDB, and Bedrock stay on AWS (Path A hybrid).
+# CI publishes a staged .pages-dist folder via wrangler pages deploy.
+name = "mechpro-dispatch"
+compatibility_date = "2026-09-01"
+
+[vars]
+MECHPRO_HOSTING = "cloudflare-pages"

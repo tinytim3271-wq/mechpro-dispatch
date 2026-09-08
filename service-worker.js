@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mechpro-shell-v17';
+const CACHE_NAME = 'mechpro-shell-v18';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -43,7 +43,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Always network-first for the main app bundle â never long-cache app.js.
+  // Always network-first for the main app bundle — never long-cache app.js.
   if (url.pathname.endsWith('/app.js') || url.pathname.endsWith('app.js')) {
     event.respondWith(
       fetch(request)
@@ -66,6 +66,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Scripts and styles: network-first so deploys pick up quickly; cache only as offline fallback.
   if (['script', 'style'].includes(request.destination)) {
     event.respondWith(
       fetch(request)
@@ -81,6 +82,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Fonts and static assets: stale-while-revalidate (cache for offline, refresh in background).
   event.respondWith(
     caches.match(request).then(cached => {
       const network = fetch(request).then(response => {
@@ -89,7 +91,7 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
         }
         return response;
-      });
+      }).catch(() => cached);
       return cached || network;
     }),
   );

@@ -38,7 +38,11 @@ function logEntry(direction, address, data, description) {
 }
 
 function assertAuth(params = {}) {
-  if (!HOST_TOKEN) return;
+  // Fail closed unless explicitly opted into unauthenticated local/dev hosts.
+  if (!HOST_TOKEN) {
+    if (process.env.MECHPRO_ALLOW_UNAUTHENTICATED_HOST === '1') return;
+    throw new Error('Unauthorized J2534 RPC — host token not configured');
+  }
   if (String(params.authToken || '') !== HOST_TOKEN) {
     throw new Error('Unauthorized J2534 RPC — invalid host token');
   }

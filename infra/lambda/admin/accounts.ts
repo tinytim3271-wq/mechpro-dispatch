@@ -186,6 +186,10 @@ async function createAccount(event: APIGatewayProxyEventV2WithJWTAuthorizer, act
 async function resetPassword(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   const username = decodeURIComponent(event.pathParameters?.username || '').trim();
   if (!username) return json(400, { message: 'Username is required' });
+  const users = await listAccountUsers();
+  if (users.some(user => user.username === username && user.role === 'super_admin')) {
+    return json(409, { message: 'Platform owner passwords cannot be reset from customer account controls' });
+  }
   await cognito.send(new AdminResetUserPasswordCommand({ UserPoolId: USER_POOL_ID, Username: username }));
   return json(202, { message: 'Password reset instructions sent to the verified email address' });
 }

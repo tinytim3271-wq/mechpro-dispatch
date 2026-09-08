@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
-    "electron": "^40.10.6",
+    "electron": "^41.10.3",
     "electron-builder": "^26.0.12",
     "esbuild": "^0.28.2"
   },
@@ -92,7 +92,7 @@
     "@capacitor/core": "^7.0.0"
   },
   "allowScripts": {
-    "electron@40.10.6": true,
+    "electron@41.10.7": true,
     "electron-winstaller@5.4.0": true
   }
 }

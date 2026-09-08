@@ -33,6 +33,25 @@ function csharpHostPath() {
   return path.join(__dirname, '..', 'diagnostics', 'j2534-service', 'publish', 'win-x64', 'J2534.Host.exe');
 }
 
+function diagnosticsCapabilitySecret() {
+  const configured = process.env.MECHPRO_DIAG_CAPABILITY_SECRET
+    || process.env.DIAGNOSTICS_CAPABILITY_SECRET
+    || '';
+  if (configured) return configured;
+  let packaged = false;
+  try {
+    packaged = Boolean(require('electron').app?.isPackaged);
+  } catch {
+    packaged = false;
+  }
+  if (packaged) {
+    throw new Error(
+      'MECHPRO_DIAG_CAPABILITY_SECRET must be set for packaged desktop builds (must match API diagnosticsCapabilitySecret)',
+    );
+  }
+  return 'mechpro-dev-diagnostics-capability-v1';
+}
+
 function startHostProcess() {
   if (hostProcess) return hostProcess;
 
@@ -42,10 +61,7 @@ function startHostProcess() {
     ...process.env,
     MECHPRO_J2534_PIPE: process.platform === 'win32' ? csharpPipeName() : pipePath(),
     MECHPRO_J2534_TOKEN: hostToken,
-    MECHPRO_DIAG_CAPABILITY_SECRET:
-      process.env.MECHPRO_DIAG_CAPABILITY_SECRET
-      || process.env.DIAGNOSTICS_CAPABILITY_SECRET
-      || 'mechpro-dev-diagnostics-capability-v1',
+    MECHPRO_DIAG_CAPABILITY_SECRET: diagnosticsCapabilitySecret(),
   };
   if (process.platform === 'win32' && fs.existsSync(csharp)) {
     hostProcess = spawn(csharp, [], {
