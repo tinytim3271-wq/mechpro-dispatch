@@ -63,12 +63,20 @@ export class ApiStack extends Stack {
     const diagnosticsCapabilitySecret = String(
       this.node.tryGetContext('diagnosticsCapabilitySecret') || '',
     ).trim();
+    const allowDevDiagnosticsSecret = ['1', 'true', true].includes(
+      this.node.tryGetContext('allowDevDiagnosticsSecret') as string | boolean,
+    );
     if (diagnosticsCapabilitySecret) {
       diagnosticsAuthFn.addEnvironment('DIAGNOSTICS_CAPABILITY_SECRET', diagnosticsCapabilitySecret);
-    } else {
-      // Local/dev synth fallback. Production: cdk deploy -c diagnosticsCapabilitySecret=...
+    } else if (allowDevDiagnosticsSecret) {
+      // Explicit local/CI synth only — never set ALLOW_DEV on production deploy.
       diagnosticsAuthFn.addEnvironment('DIAGNOSTICS_CAPABILITY_SECRET', 'mechpro-dev-diagnostics-capability-v1');
       diagnosticsAuthFn.addEnvironment('ALLOW_DEV_DIAGNOSTICS_SECRET', '1');
+    } else {
+      throw new Error(
+        'Missing diagnosticsCapabilitySecret. Pass -c diagnosticsCapabilitySecret=... for deploy, '
+        + 'or -c allowDevDiagnosticsSecret=true for local/CI synth only.',
+      );
     }
     const webhookFn = nodeFn('StripeWebhookFn', 'payments/webhook.ts');
     const assistantFn = nodeFn('AssistantFn', 'ai/assistant.ts');
@@ -110,6 +118,8 @@ export class ApiStack extends Stack {
     for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn, diagnosticsAuditFn]) {
       props.table.grantReadWriteData(fn);
     }
+    props.table.grantReadData(diagnosticsCoverageFn);
+    props.table.grantReadData(diagnosticsAuthFn);
     entitiesFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['cognito-idp:AdminUpdateUserAttributes', 'cognito-idp:ListUsers'],
       resources: [props.userPool.userPoolArn],

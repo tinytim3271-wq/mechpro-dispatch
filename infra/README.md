@@ -9,7 +9,16 @@ TypeScript CDK app for DynamoDB, Cognito, API Gateway, Lambda, S3, CloudFront, a
 * `npm run test`    perform the jest unit tests
 * `npx cdk deploy`  deploy this stack to your default AWS account/region
 * `npx cdk diff`    compare deployed stack with current state
-* `npx cdk synth`   emits the synthesized CloudFormation template
+* `npx cdk synth -c allowDevDiagnosticsSecret=true`   local/CI template synth
+* Production deploy requires `-c diagnosticsCapabilitySecret=...` (GitHub Actions secret `DIAGNOSTICS_CAPABILITY_SECRET`)
+
+## Diagnostics capability secret
+
+`/diagnostics/authorize` mints HMAC tokens for `clear_dtcs`. Never deploy with the public `mechpro-dev-diagnostics-capability-v1` fallback.
+
+* Local/CI synth: `-c allowDevDiagnosticsSecret=true`
+* Deploy: `-c diagnosticsCapabilitySecret=<long-random-value>` (set `DIAGNOSTICS_CAPABILITY_SECRET` in the GitHub `production` environment)
+* Packaged desktop builds must use the same value via `MECHPRO_DIAG_CAPABILITY_SECRET`
 
 ## GitHub Actions OIDC trust
 

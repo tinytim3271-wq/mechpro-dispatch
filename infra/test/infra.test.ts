@@ -228,6 +228,13 @@ describe('deployment workflow', () => {
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
+	test('keeps diagnostics capability secret out of CI synth and requires it on deploy', () => {
+		const workflow = readWorkflow('deploy.yml');
+		expect(workflow).toContain('npx cdk synth --all --strict -c allowDevDiagnosticsSecret=true');
+		expect(workflow).toContain('-c diagnosticsCapabilitySecret=${{ secrets.DIAGNOSTICS_CAPABILITY_SECRET }}');
+		expect(workflow).not.toMatch(/cdk deploy --all[^\n]*allowDevDiagnosticsSecret/);
+	});
+
 	test('uses the production environment before assuming the AWS role in Windows publish-download', () => {
 		const workflow = readWorkflow('windows-desktop.yml');
 		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
@@ -238,7 +245,7 @@ describe('deployment workflow', () => {
 	test('refreshes the GitHub Actions stack before publishing Windows downloads', () => {
 		const workflow = readWorkflow('windows-desktop.yml');
 		expect(workflow).toContain('- name: Refresh GitHub Actions publish role permissions');
-		expect(workflow).toContain('npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}');
+		expect(workflow).toContain('npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }} -c diagnosticsCapabilitySecret=${{ secrets.DIAGNOSTICS_CAPABILITY_SECRET }}');
 		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4\n(?:.*\n)*?\s+- name: Refresh GitHub Actions publish role permissions\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4\n(?:.*\n)*?\s+- name: Publish Windows installer to site bucket/);
 	});
 
