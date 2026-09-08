@@ -210,7 +210,7 @@ describe('deployment workflow', () => {
 	test('assumes the AWS deploy role from the main-branch deploy job', () => {
 		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy.yml'), 'utf8');
 		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
-		expect(workflow).not.toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
+		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
@@ -390,6 +390,11 @@ describe('payment integrity', () => {
 			.toBe('INV-7#2026-08-17T12:00:00.000Z#pay_123');
 		expect(paymentGsiSortKey('', '2026-08-17T12:00:00.000Z', 'pay_456'))
 			.toBe('2026-08-17T12:00:00.000Z#pay_456');
+		// Callers must pass raw values; String(undefined) would wrongly yield "undefined#..."
+		expect(paymentGsiSortKey(undefined, '2026-08-17T12:00:00.000Z', 'pay_789'))
+			.toBe('2026-08-17T12:00:00.000Z#pay_789');
+		expect(paymentGsiSortKey(undefined, '2026-08-17T12:00:00.000Z', undefined))
+			.toBe('2026-08-17T12:00:00.000Z#');
 	});
 
 	test('verifies AgentPhone signatures and rejects stale deliveries', () => {
