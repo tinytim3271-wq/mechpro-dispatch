@@ -31,6 +31,25 @@ This dual-subject trust avoids deployment lockouts when one workflow uses branch
 
 Optional repository variable `SITE_BUCKET_NAME` skips CloudFormation bucket lookup in the Windows `publish-download` job.
 
+## Blocked deploy recovery (OIDC)
+
+If GitHub Actions fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity`, the IAM role trust is stale. With admin AWS access:
+
+1. Open IAM → Roles → `MechProGitHubActionsDeployRole` → Trust relationships.
+2. Replace with `infra/oidc-trust-policy.mechpro-dispatch.json` (main branch + `production` environment subjects).
+3. Confirm the OIDC provider `token.actions.githubusercontent.com` exists in the account.
+4. Re-run **Validate and deploy** (workflow_dispatch or push to `main`).
+
+Local full deploy (after `aws login --profile mechpro`):
+
+```powershell
+$env:AWS_PROFILE = 'mechpro'
+$env:DIAGNOSTICS_CAPABILITY_SECRET = '<same value as GitHub secret>'
+./scripts/deploy-aws.ps1
+```
+
+Use `-SkipCdn` if CloudFront is blocked until AWS account verification completes.
+
 ## Cloudflare Pages (static PWA)
 
 Path A hybrid: host the SPA on Cloudflare Pages while API/auth/AI remain on AWS.
