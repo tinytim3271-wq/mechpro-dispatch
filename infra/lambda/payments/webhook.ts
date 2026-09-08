@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { ddb, TABLE_NAME } from '../common/ddb';
+import { paymentGsiSortKey } from './payment-key';
 
 const secretsClient = new SecretsManagerClient({});
 
@@ -96,7 +97,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
             pk,
             sk: paymentSk,
             gsi1pk: `${pk}#TYPE#PAYMENT`,
-            gsi1sk: `${new Date().toISOString()}#${id}`,
+            gsi1sk: paymentGsiSortKey(String(invoiceNumber), new Date().toISOString(), String(id)),
             id,
             primarySk: paymentSk,
             invoiceNumber,

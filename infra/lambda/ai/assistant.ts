@@ -1,12 +1,14 @@
 import { BedrockRuntimeClient, ConverseCommand, type Message } from '@aws-sdk/client-bedrock-runtime';
 import { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, TABLE_NAME } from '../common/ddb';
-import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
+import { requestContext, requireActiveAccount, requireRole, AuthError } from '../common/auth';
 
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'us-east-1', maxAttempts: 5, retryMode: 'adaptive' });
 const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'us.amazon.nova-lite-v1:0';
 const MAX_MESSAGE_LENGTH = 4000;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 30;
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return { statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
@@ -24,10 +26,30 @@ async function shopContext(shopId: string) {
   return items.map(item => ({ type: String(item.sk || '').split('#')[0], id: item.id, name: item.name, status: item.status, customer: item.customer, vehicle: item.vehicle, amount: item.amount, due: item.due, technician: item.tech, promise: item.promise, concern: item.complaint }));
 }
 
+async function assertWithinRateLimit(shopId: string, userId: string) {
+  const pk = `SHOP#${shopId}`;
+  const sk = `AITHROTTLE#${userId}`;
+  const now = Date.now();
+  const existing = await ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { pk, sk } }));
+  const windowStart = Number(existing.Item?.windowStart || 0);
+  const count = Number(existing.Item?.count || 0);
+  if (windowStart && now - windowStart < RATE_LIMIT_WINDOW_MS && count >= RATE_LIMIT_MAX) {
+    throw new AuthError('Assistant rate limit exceeded. Try again in a minute.');
+  }
+  const nextWindowStart = !windowStart || now - windowStart >= RATE_LIMIT_WINDOW_MS ? now : windowStart;
+  const nextCount = nextWindowStart === windowStart ? count + 1 : 1;
+  await ddb.send(new PutCommand({
+    TableName: TABLE_NAME,
+    Item: { pk, sk, windowStart: nextWindowStart, count: nextCount, updatedAt: new Date().toISOString() },
+  }));
+}
+
 export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyResultV2> => {
   try {
     const ctx = requestContext(event);
     await requireActiveAccount(ctx);
+    requireRole(ctx, ['admin', 'office', 'service_writer', 'technician']);
+    await assertWithinRateLimit(ctx.shopId, ctx.userId);
     const body = JSON.parse(event.body || '{}') as { message?: string; history?: Message[] };
     const message = String(body.message || '').trim().slice(0, MAX_MESSAGE_LENGTH);
     if (!message) return json(400, { message: 'A message is required' });

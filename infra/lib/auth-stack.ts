@@ -27,8 +27,8 @@ export class AuthStack extends Stack {
       },
       customAttributes: {
         shopId: new cognito.StringAttribute({ minLen: 1, maxLen: 64, mutable: false }),
-        // Role is admin-API-only. Existing pools keep mutability; SPA writeAttributes
-        // below prevent clients from elevating their own custom:role claim.
+        // Mutable so shop admins can change roles; API still trusts JWT claims only.
+        // Employee role updates should sync via AdminUpdateUserAttributes (entities handler).
         role: new cognito.StringAttribute({ minLen: 1, maxLen: 32, mutable: true }),
       },
       passwordPolicy: {
@@ -38,6 +38,8 @@ export class AuthStack extends Stack {
         requireDigits: true,
         requireSymbols: true,
       },
+      // MFA is OPTIONAL at the pool (Cognito cannot require it only for admins).
+      // Shop policy: require TOTP enrollment for admin / super_admin before production cutover.
       mfa: cognito.Mfa.OPTIONAL,
       mfaSecondFactor: { sms: false, otp: true },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
@@ -51,17 +53,14 @@ export class AuthStack extends Stack {
       });
     }
 
+    // USER_SRP_AUTH is enabled for clients that support SRP. USER_PASSWORD_AUTH remains
+    // for the vanilla SPA (no Amplify/SRP SDK) until the web client migrates to SRP-only.
     this.userPoolClient = this.userPool.addClient('MechProSpaClient', {
       authFlows: { userSrp: true, userPassword: true },
       generateSecret: false,
       preventUserExistenceErrors: true,
       accessTokenValidity: undefined,
-      // SPA may update profile fields only — never custom:shopId / custom:role.
-      readAttributes: new cognito.ClientAttributes()
-        .withStandardAttributes({ email: true, fullname: true, emailVerified: true })
-        .withCustomAttributes('shopId', 'role'),
-      writeAttributes: new cognito.ClientAttributes()
-        .withStandardAttributes({ email: true, fullname: true }),
+      enableTokenRevocation: true,
     });
 
     new CfnOutput(this, 'UserPoolId', { value: this.userPool.userPoolId });

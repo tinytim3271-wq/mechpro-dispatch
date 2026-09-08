@@ -350,7 +350,7 @@
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   }
   async function uploadFileToS3(blob, kind, contentType) {
-    const { uploadUrl, key } = await apiFetch("/files/presign-upload", { method: "POST", body: JSON.stringify({ kind, contentType }) });
+    const { uploadUrl, key } = await apiFetch("/files/presign-upload", { method: "POST", body: JSON.stringify({ kind, contentType, contentLength: blob.size }) });
     const response = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: blob });
     if (!response.ok) throw new Error("Upload to storage failed");
     return key;
@@ -428,13 +428,13 @@
   var seed = {
     route: "dispatch",
     orders: [
-      { id: "RO-1048", customer: "Maria Hernandez", phone: "806-555-0142", vehicle: "2018 Ford F-150 XLT", vin: "1FTEW1EP8JFA18422", complaint: "Brake pedal vibration and grinding under moderate braking.", status: "in_progress", priority: "high", tech: "Eli R.", bay: "Bay 2", mobile: false, promise: "Today, 2:30 PM", total: 684.22, scheduled: "9:00 AM", notes: "Front pads at 2mm. Replace pads and rotors; inspect rear brakes.", labor: 225, laborHours: 1.5, parts: 407.49, tax: 51.73 },
-      { id: "RO-1049", customer: "West Texas Plumbing", phone: "806-555-0177", vehicle: "2021 Chevrolet Express 2500", vin: "1GCWGAFP7M1149820", complaint: "Fleet van will not crank. Driver reports intermittent clicking.", status: "approved", priority: "normal", tech: "Noah T.", bay: "Mobile", mobile: true, promise: "Today, 4:00 PM", total: 319.85, scheduled: "10:30 AM", notes: "Mobile dispatch to 4402 Avenue Q. Battery and starter diagnosis approved.", labor: 165, laborHours: 1, parts: 130.68, tax: 24.17 },
-      { id: "RO-1050", customer: "Derek Mills", phone: "806-555-0109", vehicle: "2016 Toyota Camry SE", vin: "4T1BF1FK9GU183405", complaint: "Check engine light, rough idle, and reduced fuel economy.", status: "estimate", priority: "normal", tech: "Unassigned", bay: "Unassigned", mobile: false, promise: "Tomorrow, 11:00 AM", total: 189.95, scheduled: "1:00 PM", notes: "Initial scan shows P0302. Estimate includes diagnostic time.", labor: 165, laborHours: 1, parts: 10.61, tax: 14.34 },
-      { id: "RO-1051", customer: "Ashley Nguyen", phone: "806-555-0191", vehicle: "2020 Honda CR-V EX", vin: "7FARW2H57LE018244", complaint: "A/C blows warm at idle and cools while driving.", status: "waiting_parts", priority: "normal", tech: "Sam K.", bay: "Bay 1", mobile: false, promise: "Today, 5:30 PM", total: 742.16, scheduled: "8:00 AM", notes: "Condenser fan motor failed. Part arriving at 1:15 PM.", labor: 247.5, laborHours: 1.5, parts: 438.73, tax: 55.93 },
-      { id: "RO-1052", customer: "Caleb Foster", phone: "806-555-0126", vehicle: "2019 Ram 1500 Laramie", vin: "1C6SRFJT8KN531102", complaint: "Oil service, tire rotation, and 60k mile inspection.", status: "approved", priority: "low", tech: "Maya L.", bay: "Bay 3", mobile: false, promise: "Tomorrow, 9:30 AM", total: 244.6, scheduled: "3:00 PM", notes: "Synthetic oil service and multipoint inspection approved.", labor: 110, laborHours: 0.75, parts: 116.16, tax: 18.44 },
-      { id: "RO-1046", customer: "James Walker", phone: "806-555-0133", vehicle: "2017 GMC Sierra 1500", vin: "3GTU2NEC2HG189221", complaint: "Replace water pump and thermostat.", status: "completed", priority: "normal", tech: "Eli R.", bay: "Bay 4", mobile: false, promise: "Completed", total: 1128.43, scheduled: "Yesterday", notes: "Cooling system pressure tested. No leaks found.", labor: 495, laborHours: 3, parts: 548.2, tax: 85.23 },
-      { id: "RO-1044", customer: "Lubbock Floral", phone: "806-555-0168", vehicle: "2022 Ford Transit Connect", vin: "NM0LS7W28N1490021", complaint: "Scheduled fleet maintenance.", status: "invoiced", priority: "low", tech: "Noah T.", bay: "Mobile", mobile: true, promise: "Completed", total: 389.24, scheduled: "Monday", notes: "Invoice sent to fleet manager. Net 15 terms.", labor: 165, laborHours: 1, parts: 194.79, tax: 29.45 }
+      { id: "RO-1048", customer: "Demo Customer A", phone: "555-0142", vehicle: "2018 Ford F-150 XLT", vin: "DEMOVIN000000001", complaint: "Brake pedal vibration and grinding under moderate braking.", status: "in_progress", priority: "high", tech: "Tech A", bay: "Bay 2", mobile: false, promise: "Today, 2:30 PM", total: 684.22, scheduled: "9:00 AM", notes: "Front pads at 2mm. Replace pads and rotors; inspect rear brakes.", labor: 225, laborHours: 1.5, parts: 407.49, tax: 51.73 },
+      { id: "RO-1049", customer: "Demo Fleet Co", phone: "555-0177", vehicle: "2021 Chevrolet Express 2500", vin: "DEMOVIN000000002", complaint: "Fleet van will not crank. Driver reports intermittent clicking.", status: "approved", priority: "normal", tech: "Tech A", bay: "Mobile", mobile: true, promise: "Today, 4:00 PM", total: 319.85, scheduled: "10:30 AM", notes: "Mobile dispatch. Battery and starter diagnosis approved.", labor: 165, laborHours: 1, parts: 130.68, tax: 24.17 },
+      { id: "RO-1050", customer: "Demo Customer B", phone: "555-0109", vehicle: "2016 Toyota Camry SE", vin: "DEMOVIN000000003", complaint: "Check engine light, rough idle, and reduced fuel economy.", status: "estimate", priority: "normal", tech: "Unassigned", bay: "Unassigned", mobile: false, promise: "Tomorrow, 11:00 AM", total: 189.95, scheduled: "1:00 PM", notes: "Initial scan shows P0302. Estimate includes diagnostic time.", labor: 165, laborHours: 1, parts: 10.61, tax: 14.34 },
+      { id: "RO-1051", customer: "Demo Customer C", phone: "555-0191", vehicle: "2020 Honda CR-V EX", vin: "DEMOVIN000000004", complaint: "A/C blows warm at idle and cools while driving.", status: "waiting_parts", priority: "normal", tech: "Tech A", bay: "Bay 1", mobile: false, promise: "Today, 5:30 PM", total: 742.16, scheduled: "8:00 AM", notes: "Condenser fan motor failed. Part arriving later today.", labor: 247.5, laborHours: 1.5, parts: 438.73, tax: 55.93 },
+      { id: "RO-1052", customer: "Demo Customer D", phone: "555-0126", vehicle: "2019 Ram 1500 Laramie", vin: "DEMOVIN000000005", complaint: "Oil service, tire rotation, and 60k mile inspection.", status: "approved", priority: "low", tech: "Tech A", bay: "Bay 3", mobile: false, promise: "Tomorrow, 9:30 AM", total: 244.6, scheduled: "3:00 PM", notes: "Synthetic oil service and multipoint inspection approved.", labor: 110, laborHours: 0.75, parts: 116.16, tax: 18.44 },
+      { id: "RO-1046", customer: "Demo Customer E", phone: "555-0133", vehicle: "2017 GMC Sierra 1500", vin: "DEMOVIN000000006", complaint: "Replace water pump and thermostat.", status: "completed", priority: "normal", tech: "Tech A", bay: "Bay 4", mobile: false, promise: "Completed", total: 1128.43, scheduled: "Yesterday", notes: "Cooling system pressure tested. No leaks found.", labor: 495, laborHours: 3, parts: 548.2, tax: 85.23 },
+      { id: "RO-1044", customer: "Demo Retail Co", phone: "555-0168", vehicle: "2022 Ford Transit Connect", vin: "DEMOVIN000000007", complaint: "Scheduled fleet maintenance.", status: "invoiced", priority: "low", tech: "Tech A", bay: "Mobile", mobile: true, promise: "Completed", total: 389.24, scheduled: "Monday", notes: "Invoice sent to fleet manager. Net 15 terms.", labor: 165, laborHours: 1, parts: 194.79, tax: 29.45 }
     ],
     vehicles: [],
     inventory: [],
@@ -447,18 +447,18 @@
     purchases: [],
     shopSettingsRecords: [],
     customers: [
-      { name: "Maria Hernandez", phone: "806-555-0142", email: "maria.h@example.com", vehicles: 2, visits: 6, spend: 2834.17 },
-      { name: "West Texas Plumbing", phone: "806-555-0177", email: "fleet@wtplumbing.com", vehicles: 8, visits: 22, spend: 14982.4 },
-      { name: "Derek Mills", phone: "806-555-0109", email: "derek.mills@example.com", vehicles: 1, visits: 3, spend: 929.8 },
-      { name: "Ashley Nguyen", phone: "806-555-0191", email: "anguyen@example.com", vehicles: 2, visits: 4, spend: 1740.66 },
-      { name: "Caleb Foster", phone: "806-555-0126", email: "caleb.f@example.com", vehicles: 3, visits: 9, spend: 4822.13 },
-      { name: "Lubbock Floral", phone: "806-555-0168", email: "ops@lubbockfloral.com", vehicles: 4, visits: 15, spend: 8389.42 }
+      { name: "Demo Customer A", phone: "555-0142", email: "customer-a@example.com", vehicles: 2, visits: 6, spend: 2834.17 },
+      { name: "Demo Fleet Co", phone: "555-0177", email: "fleet@example.com", vehicles: 8, visits: 22, spend: 14982.4 },
+      { name: "Demo Customer B", phone: "555-0109", email: "customer-b@example.com", vehicles: 1, visits: 3, spend: 929.8 },
+      { name: "Demo Customer C", phone: "555-0191", email: "customer-c@example.com", vehicles: 2, visits: 4, spend: 1740.66 },
+      { name: "Demo Customer D", phone: "555-0126", email: "customer-d@example.com", vehicles: 3, visits: 9, spend: 4822.13 },
+      { name: "Demo Retail Co", phone: "555-0168", email: "retail@example.com", vehicles: 4, visits: 15, spend: 8389.42 }
     ],
     users: [
-      { id: "user-admin", name: "Jordan Davis", email: "jordan@yourcarguy.com", role: "admin", title: "Service Manager", techName: "", active: true, employeeId: "EMP-001", phone: "806-555-0100", address: "4821 34th Street, Lubbock, TX 79410", startDate: "2022-03-14", employmentType: "Salary", payRate: 72e3, payFrequency: "Biweekly", department: "Management", emergencyContact: "Taylor Davis \xB7 806-555-0101", taxStatus: "W-2" },
-      { id: "user-tech", name: "Eli Rodriguez", email: "eli@yourcarguy.com", role: "technician", title: "Lead Technician", techName: "Eli R.", active: true, employeeId: "EMP-002", phone: "806-555-0102", address: "1904 82nd Street, Lubbock, TX 79423", startDate: "2023-01-09", employmentType: "Hourly", payRate: 32, payFrequency: "Weekly", department: "Service", emergencyContact: "Maria Rodriguez \xB7 806-555-0103", taxStatus: "W-2" },
-      { id: "user-office", name: "Megan Brooks", email: "megan@yourcarguy.com", role: "office", title: "Office Coordinator", techName: "", active: true, employeeId: "EMP-003", phone: "806-555-0104", address: "3108 58th Street, Lubbock, TX 79413", startDate: "2024-02-05", employmentType: "Hourly", payRate: 21, payFrequency: "Weekly", department: "Administration", emergencyContact: "Logan Brooks \xB7 806-555-0105", taxStatus: "W-2" },
-      { id: "user-writer", name: "Tara Stone", email: "tara@yourcarguy.com", role: "service_writer", title: "Service Writer", techName: "", active: true, employeeId: "EMP-004", phone: "806-555-0106", address: "702 98th Street, Lubbock, TX 79424", startDate: "2023-08-21", employmentType: "Hourly", payRate: 24, payFrequency: "Weekly", department: "Front Counter", emergencyContact: "Greg Stone \xB7 806-555-0107", taxStatus: "W-2" }
+      { id: "user-admin", name: "Demo Admin", email: "admin@example.com", role: "admin", title: "Service Manager", techName: "", active: true, employeeId: "EMP-001", phone: "555-0100", address: "", startDate: "2022-03-14", employmentType: "Salary", payRate: 0, payFrequency: "Biweekly", department: "Management", emergencyContact: "", taxStatus: "W-2" },
+      { id: "user-tech", name: "Demo Technician", email: "tech@example.com", role: "technician", title: "Lead Technician", techName: "Tech A", active: true, employeeId: "EMP-002", phone: "555-0102", address: "", startDate: "2023-01-09", employmentType: "Hourly", payRate: 0, payFrequency: "Weekly", department: "Service", emergencyContact: "", taxStatus: "W-2" },
+      { id: "user-office", name: "Demo Office", email: "office@example.com", role: "office", title: "Office Coordinator", techName: "", active: true, employeeId: "EMP-003", phone: "555-0104", address: "", startDate: "2024-02-05", employmentType: "Hourly", payRate: 0, payFrequency: "Weekly", department: "Administration", emergencyContact: "", taxStatus: "W-2" },
+      { id: "user-writer", name: "Demo Writer", email: "writer@example.com", role: "service_writer", title: "Service Writer", techName: "", active: true, employeeId: "EMP-004", phone: "555-0106", address: "", startDate: "2023-08-21", employmentType: "Hourly", payRate: 0, payFrequency: "Weekly", department: "Front Counter", emergencyContact: "", taxStatus: "W-2" }
     ],
     currentUserId: "user-admin",
     conversations: [],
@@ -488,14 +488,14 @@
     ],
     journalEntries: [],
     expenses: [
-      { date: "Aug 14, 2026", vendor: "South Plains Auto Parts", category: "Parts & supplies", memo: "Brake rotor inventory replenishment", amount: 412.87 },
-      { date: "Aug 12, 2026", vendor: "City of Lubbock", category: "Utilities", memo: "Shop electric service", amount: 286.14 }
+      { date: "Aug 14, 2026", vendor: "Demo Parts Supplier", category: "Parts & supplies", memo: "Brake rotor inventory replenishment", amount: 412.87 },
+      { date: "Aug 12, 2026", vendor: "Demo Utilities", category: "Utilities", memo: "Shop electric service", amount: 286.14 }
     ],
     invoices: [
-      { number: "INV-2041", ro: "RO-1046", customer: "James Walker", date: "Aug 13, 2026", due: "Paid Aug 13", amount: 1128.43, subtotal: 1042.43, taxRate: 8.25, tax: 86, status: "paid" },
-      { number: "INV-2040", ro: "RO-1044", customer: "Lubbock Floral", date: "Aug 11, 2026", due: "Aug 26, 2026", amount: 389.24, subtotal: 359.58, taxRate: 8.25, tax: 29.66, status: "sent" },
-      { number: "INV-2036", ro: "RO-1039", customer: "Ramon Ortiz", date: "Jul 28, 2026", due: "Aug 12, 2026", amount: 846.9, subtotal: 782.36, taxRate: 8.25, tax: 64.54, status: "overdue" },
-      { number: "INV-2032", ro: "RO-1034", customer: "High Plains Realty", date: "Jul 21, 2026", due: "Aug 5, 2026", amount: 1276.18, subtotal: 1178.92, taxRate: 8.25, tax: 97.26, status: "overdue" }
+      { number: "INV-2041", ro: "RO-1046", customer: "Demo Customer E", date: "Aug 13, 2026", due: "Paid Aug 13", amount: 1128.43, subtotal: 1042.43, taxRate: 8.25, tax: 86, status: "paid" },
+      { number: "INV-2040", ro: "RO-1044", customer: "Demo Retail Co", date: "Aug 11, 2026", due: "Aug 26, 2026", amount: 389.24, subtotal: 359.58, taxRate: 8.25, tax: 29.66, status: "sent" },
+      { number: "INV-2036", ro: "RO-1039", customer: "Demo Customer F", date: "Jul 28, 2026", due: "Aug 12, 2026", amount: 846.9, subtotal: 782.36, taxRate: 8.25, tax: 64.54, status: "overdue" },
+      { number: "INV-2032", ro: "RO-1034", customer: "Demo Realty Co", date: "Jul 21, 2026", due: "Aug 5, 2026", amount: 1276.18, subtotal: 1178.92, taxRate: 8.25, tax: 97.26, status: "overdue" }
     ]
   };
   var state = load();
@@ -605,12 +605,17 @@
   };
   function authSession() {
     try {
-      const session = JSON.parse(localStorage.getItem("mechpro-session") || sessionStorage.getItem("mechpro-session"));
+      const raw = sessionStorage.getItem("mechpro-session") || localStorage.getItem("mechpro-session");
+      const session = JSON.parse(raw || "null");
       if (!session?.idToken) return null;
       const claims = decodeJwt(session.idToken), expiresAt = Number(claims.exp || 0) * 1e3;
       if (!expiresAt || expiresAt <= Date.now()) {
         clearAuthSession();
         return null;
+      }
+      if (localStorage.getItem("mechpro-session")) {
+        sessionStorage.setItem("mechpro-session", JSON.stringify(session));
+        localStorage.removeItem("mechpro-session");
       }
       return { ...session, claims };
     } catch {
@@ -623,6 +628,7 @@
     localStorage.removeItem("mechpro-session");
   }
   var MUTATION_QUEUE_STORE = "mechpro-mutation-queue-v1";
+  var OFFLINE_QUEUE_BLOCKED = /\/entities\/(employees|payrollentries|shopsettings|invoices|payments|expenses)(\/|$)/i;
   var flushingMutationQueue = false;
   function readMutationQueue() {
     try {
@@ -638,11 +644,13 @@
     return globalThis.crypto?.randomUUID?.() || `mutation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
   function prepareEntityMutation(path, options) {
-    const method = String(options.method || "GET").toUpperCase(), queueable = path.startsWith("/entities/") && ["POST", "PUT", "DELETE"].includes(method);
-    if (!queueable) return { path, options, queueable };
+    const method = String(options.method || "GET").toUpperCase();
+    const isEntityMutation = path.startsWith("/entities/") && ["POST", "PUT", "DELETE"].includes(method);
+    const queueable = isEntityMutation && !OFFLINE_QUEUE_BLOCKED.test(path);
+    if (!queueable) return { path, options, queueable: false };
     let body = options.body ? JSON.parse(options.body) : null;
     if (method === "POST" && body && !body.id) body = { ...body, id: mutationId() };
-    return { path, options: { ...options, method, body: body ? JSON.stringify(body) : void 0 }, queueable, expectedUpdatedAt: method === "PUT" ? body?.updatedAt : null, key: method === "POST" ? `${path}/${body.id}` : path };
+    return { path, options: { ...options, method, body: body ? JSON.stringify(body) : void 0 }, queueable: true, expectedUpdatedAt: method === "PUT" ? body?.updatedAt : null, key: method === "POST" ? `${path}/${body.id}` : path };
   }
   function queueEntityMutation(mutation, conflict = false) {
     const queue = readMutationQueue(), existingIndex = queue.findIndex((item2) => item2.key === mutation.key);
@@ -943,7 +951,10 @@
     const session = authSession();
     if (!session || !desktopEntitlementVerified) return null;
     const email = String(session.claims.email || "").trim().toLowerCase();
-    return state.users.find((user) => user.id === state.currentUserId && user.active && user.email.toLowerCase() === email) || null;
+    const profile = state.users.find((user) => user.id === state.currentUserId && user.active && user.email.toLowerCase() === email) || null;
+    if (!profile) return null;
+    const jwtRole = session.claims["custom:role"];
+    return jwtRole && jwtRole !== profile.role ? { ...profile, role: jwtRole } : profile;
   }
   function canAccess(route) {
     return !!currentUser() && roleRoutes[currentUser().role].includes(route);
@@ -1053,8 +1064,7 @@
     return { estimate: "Estimate", approved: "Approved", in_progress: "In progress", waiting_parts: "Waiting parts", completed: "Completed", invoiced: "Invoiced", paid: "Paid", sent: "Sent", overdue: "Overdue" }[status] || status;
   }
   function badge(status) {
-    const safe = ["estimate", "approved", "in_progress", "waiting_parts", "completed", "invoiced", "paid", "sent", "overdue"].includes(status) ? status : "estimate";
-    return `<span class="badge ${safe}">${escapeHtml(label(status))}</span>`;
+    return `<span class="badge ${status}">${label(status)}</span>`;
   }
   function toast(message) {
     const node = document.createElement("div");
@@ -1088,8 +1098,7 @@
     return `<div class="toolbar"><div class="tabs">${[["active", "Active"], ["completed", "Completed"], ["all", "All orders"]].map((x) => `<button class="tab ${filter === x[0] ? "active" : ""}" data-filter="${x[0]}">${x[1]}</button>`).join("")}</div><label class="toolbar-search">${icon("search")}<input id="order-search" value="${query}" placeholder="Filter this view..."/></label></div>`;
   }
   function card(x) {
-    const priority = ["normal", "high", "urgent"].includes(x.priority) ? x.priority : "normal";
-    return `<button class="job-card ${priority}" data-order="${escapeHtml(x.id)}"><div class="job-meta"><span>${escapeHtml(x.id)}</span><span>\xB7</span><span>${escapeHtml(x.bay)}</span>${x.mobile ? `<span class="mobile">${icon("map-pin", 10)} Mobile</span>` : ""}</div><h4>${escapeHtml(x.customer)}</h4><div class="vehicle">${escapeHtml(x.vehicle)}</div><p class="complaint">${escapeHtml(x.complaint)}</p><div class="job-foot"><span class="tech"><span class="mini-avatar">${escapeHtml(initials(x.tech))}</span>${escapeHtml(x.tech)}</span><span class="promise">${icon("clock-3", 11)}${escapeHtml(x.promise)}</span></div></button>`;
+    return `<button class="job-card ${x.priority}" data-order="${x.id}"><div class="job-meta"><span>${x.id}</span><span>\xB7</span><span>${x.bay}</span>${x.mobile ? `<span class="mobile">${icon("map-pin", 10)} Mobile</span>` : ""}</div><h4>${x.customer}</h4><div class="vehicle">${x.vehicle}</div><p class="complaint">${x.complaint}</p><div class="job-foot"><span class="tech"><span class="mini-avatar">${initials(x.tech)}</span>${x.tech}</span><span class="promise">${icon("clock-3", 11)}${x.promise}</span></div></button>`;
   }
   function dispatch() {
     const statuses = ["estimate", "approved", "in_progress", "waiting_parts"], orders2 = filtered(), lanes = statuses.map((s) => {
@@ -1099,7 +1108,7 @@
     return shell(`${heading("Friday \xB7 August 14, 2026", "Dispatch board", "Live shop workload, technician assignments, and promise times.")}${stats()}${toolbar()}<div class="board">${lanes}</div>`);
   }
   function orders() {
-    const rows = filtered().map((x) => `<tr data-order="${escapeHtml(x.id)}"><td class="mono strong">${escapeHtml(x.id)}</td><td><b>${escapeHtml(x.customer)}</b><small>${escapeHtml(x.phone)}</small></td><td><b>${escapeHtml(x.vehicle)}</b><small class="mono">${escapeHtml(x.vin)}</small></td><td>${badge(x.status)}</td><td>${escapeHtml(x.tech)}<small>${escapeHtml(x.bay)}</small></td><td>${escapeHtml(x.promise)}</td><td><b>${money(x.total)}</b></td></tr>`).join("");
+    const rows = filtered().map((x) => `<tr data-order="${x.id}"><td class="mono strong">${x.id}</td><td><b>${x.customer}</b><small>${x.phone}</small></td><td><b>${x.vehicle}</b><small class="mono">${x.vin}</small></td><td>${badge(x.status)}</td><td>${x.tech}<small>${x.bay}</small></td><td>${x.promise}</td><td><b>${money(x.total)}</b></td></tr>`).join("");
     return shell(`${heading("Operations", "Work orders", "Every estimate, repair, and completed job in one searchable queue.")}${toolbar()}<div class="data-panel"><table><thead><tr><th>RO number</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Assignment</th><th>Promise</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>${rows ? "" : empty("No matching work orders")}</div>`);
   }
   function schedule() {
@@ -1109,13 +1118,13 @@
       cells += `<div class="schedule-cell schedule-time">${time}</div>`;
       days.forEach((_, col) => {
         const x = col === 4 ? orders2[row] : null;
-        cells += `<div class="schedule-cell">${x ? `<button class="schedule-job ${x.mobile ? "mobile" : ""}" data-order="${escapeHtml(x.id)}"><b>${escapeHtml(x.id)} \xB7 ${escapeHtml(x.customer)}</b><span>${escapeHtml(x.vehicle)}</span><span>${escapeHtml(x.tech)} \xB7 ${escapeHtml(x.bay)}</span></button>` : ""}</div>`;
+        cells += `<div class="schedule-cell">${x ? `<button class="schedule-job ${x.mobile ? "mobile" : ""}" data-order="${x.id}"><b>${x.id} \xB7 ${x.customer}</b><span>${x.vehicle}</span><span>${x.tech} \xB7 ${x.bay}</span></button>` : ""}</div>`;
       });
     });
     return shell(`${heading("Shop calendar", "Schedule", currentUser().role === "technician" ? "Your assigned appointments and mobile service calls." : "A week view of bay appointments and mobile service calls.")}<div class="toolbar"><button class="secondary">${icon("chevron-left", 14)}</button><div class="tabs"><button class="tab active">Week</button><button class="tab">Day</button></div><button class="secondary">Today</button><button class="secondary">${icon("chevron-right", 14)}</button></div><div class="schedule-grid">${cells}</div>`);
   }
   function customers() {
-    const q = query.toLowerCase(), cards = state.customers.filter((x) => !q || Object.values(x).join(" ").toLowerCase().includes(q)).map((x) => `<article class="customer-card" data-open-customer="${encodeURIComponent(x.name)}"><div class="customer-top"><div class="avatar">${escapeHtml(initials(x.name))}</div><div><h3>${escapeHtml(x.name)}</h3><p>${escapeHtml(x.phone)} \xB7 ${escapeHtml(x.email)}</p></div></div><div class="customer-stats"><div><span>Vehicles</span><b>${x.vehicles}</b></div><div><span>Lifetime spend</span><b>${money(x.spend)}</b></div><div><span>Shop visits</span><b>${x.visits}</b></div><div><span>Last visit</span><b>Aug 2026</b></div></div><div class="customer-card-actions"><button class="customer-message" data-message-customer="${encodeURIComponent(x.name)}" data-message-phone="${encodeURIComponent(x.phone || "")}" data-message-email="${encodeURIComponent(x.email || "")}">${icon("send", 14)} Message</button><button class="mini-action" data-open-customer="${encodeURIComponent(x.name)}">${icon("user", 14)} Details</button></div></article>`).join("");
+    const q = query.toLowerCase(), cards = state.customers.filter((x) => !q || Object.values(x).join(" ").toLowerCase().includes(q)).map((x) => `<article class="customer-card" data-open-customer="${encodeURIComponent(x.name)}"><div class="customer-top"><div class="avatar">${initials(x.name)}</div><div><h3>${x.name}</h3><p>${x.phone} \xB7 ${x.email}</p></div></div><div class="customer-stats"><div><span>Vehicles</span><b>${x.vehicles}</b></div><div><span>Lifetime spend</span><b>${money(x.spend)}</b></div><div><span>Shop visits</span><b>${x.visits}</b></div><div><span>Last visit</span><b>Aug 2026</b></div></div><div class="customer-card-actions"><button class="customer-message" data-message-customer="${encodeURIComponent(x.name)}" data-message-phone="${encodeURIComponent(x.phone || "")}" data-message-email="${encodeURIComponent(x.email || "")}">${icon("send", 14)} Message</button><button class="mini-action" data-open-customer="${encodeURIComponent(x.name)}">${icon("user", 14)} Details</button></div></article>`).join("");
     return shell(`${heading("Relationships", "Customers", "Customer contact details, vehicles, and service value at a glance.")}<div class="customer-grid">${cards}</div>`);
   }
   var inspectionPoints = ["Exterior lights", "Windshield", "Wiper blades", "Washer operation", "Mirrors", "Horn", "Seat belts", "Warning lights", "Battery condition", "Battery terminals", "Charging system", "Engine oil", "Coolant", "Brake fluid", "Power steering fluid", "Transmission fluid", "Belts", "Hoses", "Air filter", "Cabin filter", "Fuel system leaks", "Exhaust system", "Front brake pads", "Rear brake pads", "Brake rotors/drums", "Brake hoses/lines", "Parking brake", "Steering components", "Front suspension", "Rear suspension", "CV boots/U-joints", "Wheel bearings", "Tire tread LF", "Tire tread RF", "Tire tread LR", "Tire tread RR"];
@@ -1736,7 +1745,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
   }
   function settings() {
     const t = state.taxSettings, stateOptions = usStates.map((s) => `<option value="${s.code}" ${t.state === s.code ? "selected" : ""}>${s.name}</option>`).join("");
-    return shell(`${heading("Administration", "Shop settings", "Core business defaults used throughout MechPro.", false)}<div class="settings-panel"><div class="form-grid"><label>Shop name<input value="Your Car Guy"/></label><label>Phone<input value="806-555-0100"/></label><label class="full">Address<input value="4821 34th Street, Lubbock, TX 79410"/></label><label>Default labor rate<input value="$165.00 / hr"/></label><label>Sales tax<input value="8.25%"/></label><label>Service bays<input value="4"/></label><label>SMS notifications<select><option>Enabled</option><option>Disabled</option></select></label></div><button class="primary settings-save">${icon("save", 15)} Save settings</button></div><div class="settings-panel"><div class="statement-head"><div><div class="eyebrow">Tax filing</div><h2>Subscribing state & filing details</h2></div>${icon("landmark", 18)}</div><form class="form-grid" id="tax-settings-form"><label>Filing state *<select name="state" required>${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${t.taxId}" placeholder="e.g. 1-234-5678-9"/></label><label>Default sales tax rate % *<input name="rate" type="number" step=".01" min="0" value="${t.rate}" required/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary" type="submit">${icon("save", 14)} Save tax settings</button></div></form></div>`);
+    return shell(`${heading("Administration", "Shop settings", "Core business defaults used throughout MechPro.", false)}<div class="settings-panel"><div class="form-grid"><label>Shop name<input value="Your Car Guy"/></label><label>Phone<input value="555-0100"/></label><label class="full">Address<input value="100 Demo Street, Example City, TX 00000"/></label><label>Default labor rate<input value="$165.00 / hr"/></label><label>Sales tax<input value="8.25%"/></label><label>Service bays<input value="4"/></label><label>SMS notifications<select><option>Enabled</option><option>Disabled</option></select></label></div><button class="primary settings-save">${icon("save", 15)} Save settings</button></div><div class="settings-panel"><div class="statement-head"><div><div class="eyebrow">Tax filing</div><h2>Subscribing state & filing details</h2></div>${icon("landmark", 18)}</div><form class="form-grid" id="tax-settings-form"><label>Filing state *<select name="state" required>${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${t.taxId}" placeholder="e.g. 1-234-5678-9"/></label><label>Default sales tax rate % *<input name="rate" type="number" step=".01" min="0" value="${t.rate}" required/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary" type="submit">${icon("save", 14)} Save tax settings</button></div></form></div>`);
   }
   function loginScreen() {
     return `<main class="login-screen"><section class="login-panel"><div class="brand login-brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders${isDesktopApp2 ? " \xB7 Windows" : ""}</small></div></div><div class="eyebrow">Secure team access</div><h1>Sign in to your workspace</h1><p>${isDesktopApp2 ? "An internet connection and active subscription are required." : "Use the employee login created by your Administrator."}</p><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required placeholder="you@yourcarguy.com"/></label><label>Password<input name="password" type="password" autocomplete="current-password" required placeholder="Password"/></label><p class="login-error" id="login-error" ${desktopLoginMessage ? "" : "hidden"}>${escapeHtml(desktopLoginMessage || "Incorrect email or password.")}</p><button class="primary" type="submit">${icon("log-in", 15)} Sign in</button></form><button class="login-reset" type="button" onclick="openPasswordReset()">Forgot password?</button>${isDesktopApp2 ? "" : `<div class="login-downloads"><a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.exe" download>Download MechPro installer (.exe)</a><a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.zip" download>Download portable zip</a></div>`}<div class="login-help"><strong>${isDesktopApp2 ? "Online subscription verification" : "Cognito-backed account"}</strong><span>${isDesktopApp2 ? "Access is checked at sign-in and while the app is running." : "Contact your Administrator if you need access."}</span></div></section></main>`;
@@ -1897,7 +1906,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
     });
   }
   function employees() {
-    const rows = state.users.map((user) => `<tr><td><div class="employee-name"><span class="avatar">${escapeHtml(initials(user.name))}</span><div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.employeeId || "Pending ID")} \xB7 ${escapeHtml(user.email)}</small></div></div></td><td>${escapeHtml(roleLabel[user.role] || user.role)}<small>${escapeHtml(user.title || "No title")} \xB7 ${escapeHtml(user.department || "Unassigned")}</small></td><td>${escapeHtml(user.employmentType || "\u2014")}<small>${escapeHtml(user.payFrequency || "\u2014")} \xB7 ${user.payRate ? user.employmentType === "Salary" ? money(user.payRate) + " / yr" : money(user.payRate) + " / hr" : "Rate pending"}</small></td><td>${escapeHtml(user.phone || "\u2014")}<small>${escapeHtml(user.startDate || "Start date pending")}</small></td><td><span class="badge ${user.active ? "paid" : "overdue"}">${user.active ? "Active" : "Inactive"}</span><small>${escapeHtml(user.techName || "No dispatch identity")}</small></td><td><button class="mini-action" data-toggle-user="${escapeHtml(user.id)}" ${user.id === currentUser().id ? "disabled" : ""}>${user.active ? "Deactivate" : "Activate"}</button></td></tr>`).join("");
+    const rows = state.users.map((user) => `<tr><td><div class="employee-name"><span class="avatar">${initials(user.name)}</span><div><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.employeeId || "Pending ID")} \xB7 ${escapeHtml(user.email)}</small></div></div></td><td>${escapeHtml(roleLabel[user.role])}<small>${escapeHtml(user.title || "No title")} \xB7 ${escapeHtml(user.department || "Unassigned")}</small></td><td>${escapeHtml(user.employmentType || "\u2014")}<small>${escapeHtml(user.payFrequency || "\u2014")} \xB7 ${user.payRate ? user.employmentType === "Salary" ? money(user.payRate) + " / yr" : money(user.payRate) + " / hr" : "Rate pending"}</small></td><td>${escapeHtml(user.phone || "\u2014")}<small>${escapeHtml(user.startDate || "Start date pending")}</small></td><td><span class="badge ${user.active ? "paid" : "overdue"}">${user.active ? "Active" : "Inactive"}</span><small>${escapeHtml(user.techName || "No dispatch identity")}</small></td><td><button class="mini-action" data-toggle-user="${escapeHtml(user.id)}" ${user.id === currentUser().id ? "disabled" : ""}>${user.active ? "Deactivate" : "Activate"}</button></td></tr>`).join("");
     return shell(`${heading("Team access", "Employees", "Employee records, employment details, payroll rates, and login access.", false)}<div class="employee-actions"><div class="access-note">${icon("shield-check", 15)} Admin sees all data. Technicians see only assigned jobs. Office sees customers, invoices, and accounting. Service writers manage service operations.</div><button class="primary" id="new-employee">${icon("user-plus", 15)} Create login</button></div><div class="data-panel"><table><thead><tr><th>Employee record</th><th>Role & department</th><th>Employment & pay</th><th>Contact & start</th><th>Access</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`);
   }
   function payroll() {
@@ -1910,8 +1919,8 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
     return { user, period, lines, hours, shiftHours, gross, federal, fica, other, net: Math.max(0, gross - federal - fica - other), salaryPay };
   }
   function payStubMarkup(stub) {
-    const user = stub.user, lines = stub.lines.map((line) => `<tr><td class="mono">${line.roNumber}</td><td>${line.customer}<small>${line.vehicle}</small></td><td>${line.hours.toFixed(2)}</td><td>${money(line.rate)}</td><td><b>${money(line.amount)}</b></td></tr>`).join("");
-    return `<section class="pay-stub"><div class="pay-stub-head"><div><div class="eyebrow">${user.employeeId || "Employee"} \xB7 ${user.department || "Department"}</div><h2>${user.name}</h2><p>${user.title} \xB7 ${user.employmentType || "Employment type"} \xB7 ${user.payRate ? user.employmentType === "Salary" ? money(user.payRate) + " / year" : money(user.payRate) + " / hr" : "Rate pending"}</p></div><div class="net-pay"><span>Net pay</span><strong>${money(stub.net)}</strong></div></div><div class="pay-stub-totals"><div><span>Job labor hours</span><b>${stub.hours.toFixed(2)}</b></div><div><span>Shift hours</span><b>${stub.shiftHours.toFixed(2)}</b></div><div><span>Gross pay</span><b>${money(stub.gross)}</b></div><div><span>Federal + FICA est.</span><b>(${money(stub.federal + stub.fica)})</b></div></div>${stub.salaryPay ? `<div class="salary-line">Weekly salary base: <b>${money(stub.salaryPay)}</b></div>` : ""}<table><thead><tr><th>Work order</th><th>Job</th><th>Hours</th><th>Rate</th><th>Pay</th></tr></thead><tbody>${lines || `<tr><td colspan="5">No completed job labor has been posted this week.</td></tr>`}</tbody></table><div class="pay-stub-foot"><span>Tax status: ${user.taxStatus || "Not set"}</span><span>Global shift clock is tracked separately to prevent duplicate pay.</span></div></section>`;
+    const user = stub.user, lines = stub.lines.map((line) => `<tr><td class="mono">${escapeHtml(line.roNumber)}</td><td>${escapeHtml(line.customer)}<small>${escapeHtml(line.vehicle)}</small></td><td>${line.hours.toFixed(2)}</td><td>${money(line.rate)}</td><td><b>${money(line.amount)}</b></td></tr>`).join("");
+    return `<section class="pay-stub"><div class="pay-stub-head"><div><div class="eyebrow">${escapeHtml(user.employeeId || "Employee")} \xB7 ${escapeHtml(user.department || "Department")}</div><h2>${escapeHtml(user.name)}</h2><p>${escapeHtml(user.title)} \xB7 ${escapeHtml(user.employmentType || "Employment type")} \xB7 ${user.payRate ? user.employmentType === "Salary" ? money(user.payRate) + " / year" : money(user.payRate) + " / hr" : "Rate pending"}</p></div><div class="net-pay"><span>Net pay</span><strong>${money(stub.net)}</strong></div></div><div class="pay-stub-totals"><div><span>Job labor hours</span><b>${stub.hours.toFixed(2)}</b></div><div><span>Shift hours</span><b>${stub.shiftHours.toFixed(2)}</b></div><div><span>Gross pay</span><b>${money(stub.gross)}</b></div><div><span>Federal + FICA est.</span><b>(${money(stub.federal + stub.fica)})</b></div></div>${stub.salaryPay ? `<div class="salary-line">Weekly salary base: <b>${money(stub.salaryPay)}</b></div>` : ""}<table><thead><tr><th>Work order</th><th>Job</th><th>Hours</th><th>Rate</th><th>Pay</th></tr></thead><tbody>${lines || `<tr><td colspan="5">No completed job labor has been posted this week.</td></tr>`}</tbody></table><div class="pay-stub-foot"><span>Tax status: ${escapeHtml(user.taxStatus || "Not set")}</span><span>Global shift clock is tracked separately to prevent duplicate pay.</span></div></section>`;
   }
   function openEmployee() {
     showModal(`<form class="modal wide" id="employee-form"><div class="modal-head"><h2>Create employee profile</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><h3>Identity & access</h3><div class="form-grid"><label>Employee name *<input name="name" required/></label><label>Employee ID *<input name="employeeId" placeholder="EMP-005" required/></label><label>Job title<input name="title" placeholder="e.g. Service Writer"/></label><label>Department<input name="department" placeholder="e.g. Service"/></label><label class="full">Email address *<input type="email" name="email" required/></label><label>Role<select name="role"><option value="technician">Technician</option><option value="office">Office</option><option value="service_writer">Service Writer</option><option value="admin">Admin</option></select></label><label class="full">Technician dispatch name <input name="techName" placeholder="Required for technicians, e.g. Eli R."/></label></div><h3>Employment information</h3><div class="form-grid"><label>Employment type<select name="employmentType"><option>Hourly</option><option>Salary</option><option>Contractor</option></select></label><label>Pay rate *<input name="payRate" type="number" min="0" step=".01" required/></label><label>Pay frequency<select name="payFrequency"><option>Weekly</option><option>Biweekly</option><option>Monthly</option></select></label><label>Start date<input name="startDate" type="date" value="2026-08-14"/></label><label>Tax status<select name="taxStatus"><option>W-2</option><option>1099 Contractor</option></select></label><label>Phone<input name="phone" type="tel"/></label><label class="full">Home address<input name="address"/></label><label class="full">Emergency contact<input name="emergencyContact" placeholder="Name \xB7 phone number"/></label></div><div class="ledger-note">${icon("info", 15)} Create the matching Cognito account before the employee signs in. Passwords are never stored in employee records.</div></div><div class="modal-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">${icon("user-plus", 14)} Create profile</button></div></form>`);
@@ -2009,7 +2018,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
       render();
     };
   }
-  var importTypes = { customers: { title: "Customers", icon: "users", columns: "name, phone, email", required: "name", sample: "name,phone,email\nAlex Johnson,806-555-0123,alex@example.com" }, vehicles: { title: "Vehicles", icon: "car-front", columns: "customer, year, make, model, vin, plate", required: "customer, year, make, model", sample: "customer,year,make,model,vin,plate\nAlex Johnson,2020,Ford,Escape,1FMCU0G60LUA00001,ABC-1234" }, orders: { title: "Work orders", icon: "clipboard-list", columns: "ro_number, customer, vehicle, complaint, status, total", required: "customer, vehicle, complaint", sample: "ro_number,customer,vehicle,complaint,status,total\nRO-1053,Alex Johnson,2020 Ford Escape,Oil change,approved,89.95" }, expenses: { title: "Expenses", icon: "wallet-cards", columns: "date, vendor, category, memo, amount", required: "vendor, amount", sample: "date,vendor,category,memo,amount\n2026-08-14,Tool Supply Co,Tools,Socket set,149.99" } };
+  var importTypes = { customers: { title: "Customers", icon: "users", columns: "name, phone, email", required: "name", sample: "name,phone,email\nDemo Customer,555-0123,demo.customer@example.com" }, vehicles: { title: "Vehicles", icon: "car-front", columns: "customer, year, make, model, vin, plate", required: "customer, year, make, model", sample: "customer,year,make,model,vin,plate\nDemo Customer,2020,Ford,Escape,DEMOVIN000000010,ABC-1234" }, orders: { title: "Work orders", icon: "clipboard-list", columns: "ro_number, customer, vehicle, complaint, status, total", required: "customer, vehicle, complaint", sample: "ro_number,customer,vehicle,complaint,status,total\nRO-1053,Demo Customer,2020 Ford Escape,Oil change,approved,89.95" }, expenses: { title: "Expenses", icon: "wallet-cards", columns: "date, vendor, category, memo, amount", required: "vendor, amount", sample: "date,vendor,category,memo,amount\n2026-08-14,Demo Tool Supply,Tools,Socket set,149.99" } };
   function imports() {
     const cards = Object.entries(importTypes).map(([type, def]) => `<article class="import-card"><div class="import-card-icon">${icon(def.icon, 20)}</div><div><h3>${def.title}</h3><p>Required: ${def.required}</p><p class="import-columns">Columns: ${def.columns}</p></div><button class="secondary" data-import-type="${type}">${icon("upload", 14)} Choose CSV</button><button class="template-link" data-template="${type}">${icon("download", 13)} Template</button></article>`).join("");
     return shell(`${heading("Data management", "Import records", "Bring historical CSV data into MechPro. Records are checked before they are added.", false)}<input id="csv-input" type="file" accept=".csv,text/csv" hidden/><div class="import-note">${icon("shield-check", 16)}<span>Imports are stored in this browser. Review each batch before confirming it.</span></div><div class="import-grid">${cards}</div>${importPreview ? previewMarkup() : ""}`);
@@ -2290,7 +2299,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
           submitButton.disabled = false;
           return;
         }
-        localStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Date.now() + tokens.ExpiresIn * 1e3 }));
+        sessionStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Date.now() + tokens.ExpiresIn * 1e3 }));
         state.currentUserId = user.id;
         state.route = roleRoutes[user.role][0];
         query = "";
@@ -2566,8 +2575,8 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     const technicians = state.users.filter((user) => user.active && user.techName).map((user) => user.techName), canManage = ["admin", "service_writer"].includes(currentUser().role), isAssignedTech = currentUser().role === "technician" && currentUser().techName === x.tech, activeClock = openJobClock(x.id), jobClockControl = isAssignedTech ? `<section class="job-clock-panel"><div><h3>Job time clock</h3><p>${activeClock ? `Clocked in at ${formatTime(activeClock.clockIn)}` : `${formatHours(jobTrackedHours(x.id))} tracked on this job`}</p></div><button class="${activeClock ? "secondary danger" : "primary"}" id="job-clock" data-work-order-id="${x.id}">${icon(activeClock ? "square" : "play", 14)} ${activeClock ? "Clock out job" : "Clock in to job"}</button></section>` : "", inventoryLines = (x.estimate?.lines || []).filter((line) => line.inventoryId || line.inventorySku), inventoryMarkup = inventoryLines.length ? `<section><h3>Linked inventory</h3>${inventoryLines.map((line) => {
       const item = state.inventory.find((record) => record.id === line.inventoryId || line.inventorySku && record.sku === line.inventorySku);
       return `<p><b>${escapeHtml(item?.sku || line.inventorySku || "Unknown SKU")}</b> \xB7 ${escapeHtml(item?.name || line.service)} \xB7 ${Number(line.committedQuantity || 0)} committed</p>`;
-    }).join("")}${x.inventoryDeducted ? `<small>Deducted ${new Date(x.inventoryCommittedAt).toLocaleString()}</small>` : ""}</section>` : "", assignment = canManage ? `<label>Assigned technician<select id="detail-tech"><option>Unassigned</option>${technicians.map((t) => `<option ${t === x.tech ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Labor hours<select id="detail-hours">${[0, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8].map((h) => `<option value="${h}" ${Number(x.laborHours ?? 0) === h ? "selected" : ""}>${h === 0 ? "Not set" : h.toFixed(2) + " hours"}</option>`).join("")}</select></label>` : `<section><h3>Assignment</h3><p>${escapeHtml(x.tech)} \xB7 ${Number(x.laborHours ?? 0).toFixed(2)} labor hours</p></section>`;
-    showModal(`<div class="modal wide"><div class="modal-head"><div><span class="mono">${escapeHtml(x.id)}</span><h2>Work order details</h2></div><button class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="detail-hero"><div>${badge(x.status)}<h2>${escapeHtml(x.customer)}</h2><p>${escapeHtml(x.vehicle)} \xB7 <span class="mono">${escapeHtml(x.vin)}</span></p></div><div><div class="amount">${money(x.total)}</div><p>${escapeHtml(x.tech)} \xB7 ${escapeHtml(x.bay)}</p></div></div><div class="detail-grid"><div><section><h3>Customer complaint</h3><p>${escapeHtml(x.complaint)}</p></section><section><h3>Technician notes</h3><p>${escapeHtml(x.notes)}</p></section><section><h3>Estimate breakdown</h3><p>Labor: ${money(x.labor)} \xB7 ${Number(x.laborHours ?? 0).toFixed(2)} hours<br>Parts & supplies: ${money(x.parts)}<br>Tax: ${money(x.tax)}</p></section>${inventoryMarkup}</div><aside><label>Work status<select id="detail-status" ${canManage ? "" : "disabled"}>${["estimate", "approved", "in_progress", "waiting_parts", "completed", "invoiced"].map((s) => `<option value="${s}" ${s === x.status ? "selected" : ""}>${label(s)}</option>`).join("")}</select></label>${assignment}${jobClockControl}<section><h3>Activity</h3><p>Work order opened \xB7 Aug 14<br>Customer authorization recorded<br>${escapeHtml(x.promise)}</p></section></aside></div></div><div class="modal-actions">${canManage ? `<button class="secondary danger" id="delete-order">${icon("trash-2", 14)} Delete</button><button class="primary" id="save-order">${icon("save", 14)} Save changes</button>` : `<button class="primary" data-close>Close</button>`}</div></div>`);
+    }).join("")}${x.inventoryDeducted ? `<small>Deducted ${new Date(x.inventoryCommittedAt).toLocaleString()}</small>` : ""}</section>` : "", assignment = canManage ? `<label>Assigned technician<select id="detail-tech"><option>Unassigned</option>${technicians.map((t) => `<option ${t === x.tech ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Labor hours<select id="detail-hours">${[0, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8].map((h) => `<option value="${h}" ${Number(x.laborHours ?? 0) === h ? "selected" : ""}>${h === 0 ? "Not set" : h.toFixed(2) + " hours"}</option>`).join("")}</select></label>` : `<section><h3>Assignment</h3><p>${x.tech} \xB7 ${Number(x.laborHours ?? 0).toFixed(2)} labor hours</p></section>`;
+    showModal(`<div class="modal wide"><div class="modal-head"><div><span class="mono">${x.id}</span><h2>Work order details</h2></div><button class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="detail-hero"><div>${badge(x.status)}<h2>${x.customer}</h2><p>${x.vehicle} \xB7 <span class="mono">${x.vin}</span></p></div><div><div class="amount">${money(x.total)}</div><p>${x.tech} \xB7 ${x.bay}</p></div></div><div class="detail-grid"><div><section><h3>Customer complaint</h3><p>${x.complaint}</p></section><section><h3>Technician notes</h3><p>${x.notes}</p></section><section><h3>Estimate breakdown</h3><p>Labor: ${money(x.labor)} \xB7 ${Number(x.laborHours ?? 0).toFixed(2)} hours<br>Parts & supplies: ${money(x.parts)}<br>Tax: ${money(x.tax)}</p></section>${inventoryMarkup}</div><aside><label>Work status<select id="detail-status" ${canManage ? "" : "disabled"}>${["estimate", "approved", "in_progress", "waiting_parts", "completed", "invoiced"].map((s) => `<option value="${s}" ${s === x.status ? "selected" : ""}>${label(s)}</option>`).join("")}</select></label>${assignment}${jobClockControl}<section><h3>Activity</h3><p>Work order opened \xB7 Aug 14<br>Customer authorization recorded<br>${x.promise}</p></section></aside></div></div><div class="modal-actions">${canManage ? `<button class="secondary danger" id="delete-order">${icon("trash-2", 14)} Delete</button><button class="primary" id="save-order">${icon("save", 14)} Save changes</button>` : `<button class="primary" data-close>Close</button>`}</div></div>`);
     if (canManage) document.querySelector("#save-order").onclick = async (event) => {
       const button = event.currentTarget, nextStatus = document.querySelector("#detail-status").value, terminal = ["completed", "invoiced"], firstCompletion = terminal.includes(nextStatus) && !terminal.includes(x.status);
       button.disabled = true;
@@ -2700,7 +2709,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     document.querySelectorAll("[data-estimate-decline]").forEach((button) => button.onclick = () => decideEstimate(button.dataset.estimateDecline, "declined"));
   };
   function shopProfile() {
-    return state.shopSettingsRecords.find((item) => item.id === "profile") || { id: "profile", shopName: "Your Car Guy", phone: "806-555-0100", address: "4821 34th Street, Lubbock, TX 79410", laborRate: 165, invoiceFooter: "Thank you for your business.", logoUrl: "", carfaxEnabled: false, plateProviderEnabled: false };
+    return state.shopSettingsRecords.find((item) => item.id === "profile") || { id: "profile", shopName: "Your Car Guy", phone: "555-0100", address: "100 Demo Street, Example City, TX 00000", laborRate: 165, invoiceFooter: "Thank you for your business.", logoUrl: "", carfaxEnabled: false, plateProviderEnabled: false };
   }
   settings = function() {
     const profile = shopProfile(), t = state.taxSettings, stateOptions = usStates.map((s) => `<option value="${s.code}" ${t.state === s.code ? "selected" : ""}>${s.name}</option>`).join("");
@@ -2837,7 +2846,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
   };
   async function resolveAuthenticatedProfile(tokens, email) {
     const claims = decodeJwt(tokens.IdToken), normalized = String(claims.email || email).trim().toLowerCase(), role = claims["custom:role"], session = { idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 };
-    localStorage.setItem("mechpro-session", JSON.stringify(session));
+    sessionStorage.setItem("mechpro-session", JSON.stringify(session));
     if (role === "super_admin") return state.users.find((user) => String(user.email || "").trim().toLowerCase() === normalized);
     let employees2 = await apiFetch("/entities/employees"), profile = employees2.find((user) => user.active && String(user.email || "").trim().toLowerCase() === normalized);
     if (!profile && role === "admin") {
@@ -2864,7 +2873,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
         const tokens = await cognitoSignIn(data.email.trim(), data.password);
         if (isDesktopApp2) {
           const claims = decodeJwt(tokens.IdToken);
-          localStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 }));
+          sessionStorage.setItem("mechpro-session", JSON.stringify({ idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 }));
           await verifyDesktopEntitlement();
         }
         const user = await resolveAuthenticatedProfile(tokens, data.email);
@@ -2891,7 +2900,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
       }
     });
   };
-  var shopProfileDefaults = { id: "profile", shopName: "Your Car Guy", phone: "806-555-0100", address: "4821 34th Street, Lubbock, TX 79410", laborRate: 165, invoiceFooter: "Thank you for your business.", logoUrl: "", brandColor: "#087e6a", accentColor: "#ffd34e", themeMode: "device", coupons: [], defaultVendor: "", defaultVendorByKind: {}, carfaxEnabled: false, plateProviderEnabled: false };
+  var shopProfileDefaults = { id: "profile", shopName: "Your Car Guy", phone: "555-0100", address: "100 Demo Street, Example City, TX 00000", laborRate: 165, invoiceFooter: "Thank you for your business.", logoUrl: "", brandColor: "#087e6a", accentColor: "#ffd34e", themeMode: "device", coupons: [], defaultVendor: "", defaultVendorByKind: {}, carfaxEnabled: false, plateProviderEnabled: false };
   function safeHexColor(value2, fallback) {
     const color = String(value2 || "").trim();
     return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
@@ -3142,14 +3151,14 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
   };
   var sampleOrderIds = /* @__PURE__ */ new Set(["RO-1044", "RO-1046", "RO-1048", "RO-1049", "RO-1050", "RO-1051", "RO-1052"]);
   var sampleInvoiceIds = /* @__PURE__ */ new Set(["INV-2032", "INV-2036", "INV-2040", "INV-2041"]);
-  var sampleCustomerNames = /* @__PURE__ */ new Set(["Maria Hernandez", "West Texas Plumbing", "Derek Mills", "Ashley Nguyen", "Caleb Foster", "Lubbock Floral"]);
+  var sampleCustomerNames = /* @__PURE__ */ new Set(["Demo Customer A", "Demo Fleet Co", "Demo Customer B", "Demo Customer C", "Demo Customer D", "Demo Retail Co"]);
   var onboardingCheckComplete = false;
   function localSampleRecord(type, record) {
     if (record.sampleData === true) return true;
     if (type === "orders") return sampleOrderIds.has(record.id);
     if (type === "invoices") return sampleInvoiceIds.has(record.number || record.id);
     if (type === "customers") return sampleCustomerNames.has(record.name);
-    if (type === "expenses") return ["South Plains Auto Parts|Brake rotor inventory replenishment|412.87", "City of Lubbock|Shop electric service|286.14"].includes(`${record.vendor || ""}|${record.memo || ""}|${Number(record.amount || 0)}`);
+    if (type === "expenses") return ["Demo Parts Supplier|Brake rotor inventory replenishment|412.87", "Demo Utilities|Shop electric service|286.14"].includes(`${record.vendor || ""}|${record.memo || ""}|${Number(record.amount || 0)}`);
     return false;
   }
   function removeLocalSampleData() {

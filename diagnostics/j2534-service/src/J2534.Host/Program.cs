@@ -8,17 +8,21 @@ namespace MechPro.J2534.Host;
 /// <summary>Named-pipe JSON-RPC host for J2534 diagnostic operations.</summary>
 public static class Program
 {
-    public const string PipeName = "mechpro-j2534";
-
     public static async Task Main(string[] args)
     {
+        var pipeName = Environment.GetEnvironmentVariable("MECHPRO_J2534_PIPE") ?? "mechpro-j2534";
+        if (pipeName.StartsWith(@"\\.\pipe\", StringComparison.OrdinalIgnoreCase))
+        {
+            pipeName = pipeName[@"\\.\pipe\".Length..];
+        }
+
         var session = new DiagnosticSession();
-        Console.WriteLine($"J2534.Host starting on \\\\.\\pipe\\{PipeName}");
+        Console.WriteLine($"J2534.Host starting on \\\\.\\pipe\\{pipeName}");
 
         while (true)
         {
             await using var pipe = new NamedPipeServerStream(
-                PipeName,
+                pipeName,
                 PipeDirection.InOut,
                 NamedPipeServerStream.MaxAllowedServerInstances,
                 PipeTransmissionMode.Byte,

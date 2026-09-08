@@ -12,6 +12,7 @@ const os = require('node:os');
 const PIPE_NAME = process.env.MECHPRO_J2534_PIPE || (process.platform === 'win32'
   ? '\\\\.\\pipe\\mechpro-j2534'
   : path.join(os.tmpdir(), 'mechpro-j2534.sock'));
+const HOST_TOKEN = process.env.MECHPRO_J2534_TOKEN || '';
 
 const SIM_VIN = '1C6SRFHT0LN123456';
 const SIM_PLATFORM = 'DT';
@@ -36,9 +37,21 @@ function logEntry(direction, address, data, description) {
   if (sim.commLog.length > 5000) sim.commLog.shift();
 }
 
+function assertAuth(params = {}) {
+  // Fail closed unless explicitly opted into unauthenticated local/dev hosts.
+  if (!HOST_TOKEN) {
+    if (process.env.MECHPRO_ALLOW_UNAUTHENTICATED_HOST === '1') return;
+    throw new Error('Unauthorized J2534 RPC — host token not configured');
+  }
+  if (String(params.authToken || '') !== HOST_TOKEN) {
+    throw new Error('Unauthorized J2534 RPC — invalid host token');
+  }
+}
+
 function handleRequest(req) {
   const { id, method, params = {} } = req;
   try {
+    assertAuth(params);
     const result = dispatch(method, params);
     return { jsonrpc: '2.0', id, result };
   } catch (error) {
@@ -65,7 +78,7 @@ function dispatch(method, params) {
     case 'readDtcs':
       return readDtcs();
     case 'clearDtcs':
-      return clearDtcs();
+      return clearDtcs(params);
     case 'startLiveLog':
       if (!sim?.connected) throw new Error('Not connected to vehicle bus');
       sim.liveLogActive = true;
@@ -252,7 +265,9 @@ function readDtcs() {
   };
 }
 
-function clearDtcs() {
+function clearDtcs(params = {}) {
+  const { verifyClearDtcsToken } = require('./capability-token');
+  verifyClearDtcsToken(params.authorizationToken);
   requireConnection();
   logEntry('tx', '0x7E0', '14FFFFFF', 'Clear DTCs (UDS 0x14 FF FF FF)');
   logEntry('rx', '0x7E8', '54', 'DTCs cleared');

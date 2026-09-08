@@ -2,6 +2,7 @@ import { Stack, StackProps, RemovalPolicy, Duration } from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
+import { APP_ALLOWED_ORIGINS } from './allowed-origins';
 
 /**
  * Multi-tenant single-table DynamoDB design plus private S3 storage for
@@ -45,13 +46,8 @@ export class DataStack extends Stack {
       cors: [
         {
           allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET],
-          allowedOrigins: [
-            'https://www.yourcarguy806.com',
-            'https://yourcarguy806.com',
-            'http://127.0.0.1:3000',
-            'http://localhost:3000',
-          ],
-          allowedHeaders: ['Content-Type', 'Content-Length'],
+          allowedOrigins: APP_ALLOWED_ORIGINS,
+          allowedHeaders: ['*'],
           maxAge: 3000,
         },
       ],

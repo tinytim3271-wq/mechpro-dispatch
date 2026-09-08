@@ -5,10 +5,13 @@ namespace MechPro.J2534.Host;
 
 public static class RpcDispatcher
 {
+    static readonly string? HostToken = Environment.GetEnvironmentVariable("MECHPRO_J2534_TOKEN");
+
     public static async Task<JsonRpcResponse> DispatchAsync(JsonRpcRequest request, DiagnosticSession session)
     {
         try
         {
+            AssertAuth(request.Params);
             var result = request.Method switch
             {
                 "ping" => new { ok = true, simulator = session.IsSimulator },
@@ -19,7 +22,7 @@ public static class RpcDispatcher
                 "readVin" => await session.ReadVinAsync(),
                 "identifyEcus" => await session.IdentifyEcusAsync(),
                 "readDtcs" => await session.ReadDtcsAsync(),
-                "clearDtcs" => await session.ClearDtcsAsync(),
+                "clearDtcs" => await ClearDtcs(request.Params, session),
                 "startLiveLog" => session.StartLiveLog(),
                 "stopLiveLog" => session.StopLiveLog(),
                 "pollLiveLog" => session.PollLiveLog(ParseSince(request.Params)),
@@ -31,6 +34,32 @@ public static class RpcDispatcher
         catch (Exception ex)
         {
             return JsonRpcResponse.Fail(request.Id, -32000, ex.Message);
+        }
+    }
+
+    static async Task<object> ClearDtcs(JsonElement? element, DiagnosticSession session)
+    {
+        string? authorizationToken = null;
+        if (element is not null && element.Value.TryGetProperty("authorizationToken", out var token))
+        {
+            authorizationToken = token.GetString();
+        }
+        CapabilityToken.VerifyClearDtcs(authorizationToken);
+        return await session.ClearDtcsAsync();
+    }
+
+    static void AssertAuth(JsonElement? element)
+    {
+        // Fail closed unless explicitly opted into unauthenticated local/dev hosts.
+        if (string.IsNullOrEmpty(HostToken))
+        {
+            if (Environment.GetEnvironmentVariable("MECHPRO_ALLOW_UNAUTHENTICATED_HOST") == "1") return;
+            throw new UnauthorizedAccessException("Unauthorized J2534 RPC — host token not configured");
+        }
+        if (element is null || !element.Value.TryGetProperty("authToken", out var token)
+            || token.GetString() != HostToken)
+        {
+            throw new UnauthorizedAccessException("Unauthorized J2534 RPC — invalid host token");
         }
     }
 

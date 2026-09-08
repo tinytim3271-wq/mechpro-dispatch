@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('mechproDiagnostics', Object.freeze({
   readVin: () => invoke('diagnostics:readVin'),
   identifyEcus: () => invoke('diagnostics:identifyEcus'),
   readDtcs: () => invoke('diagnostics:readDtcs'),
-  clearDtcs: () => invoke('diagnostics:clearDtcs'),
+  clearDtcs: (params) => invoke('diagnostics:clearDtcs', params),
   startLiveLog: () => invoke('diagnostics:startLiveLog'),
   stopLiveLog: () => invoke('diagnostics:stopLiveLog'),
   pollLiveLog: (since) => invoke('diagnostics:pollLiveLog', since),

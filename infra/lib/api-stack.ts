@@ -12,6 +12,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import { bundledLambdaCode } from './esbuild-asset';
+import { APP_ALLOWED_ORIGINS } from './allowed-origins';
 
 export interface ApiStackProps extends StackProps {
   table: dynamodb.Table;
@@ -39,6 +40,7 @@ export class ApiStack extends Stack {
       });
 
     const entitiesFn = nodeFn('EntitiesFn', 'entities/handler.ts');
+    entitiesFn.addEnvironment('USER_POOL_ID', props.userPool.userPoolId);
     const vehicleDecodeFn = nodeFn('VehicleDecodeFn', 'vehicles/decode.ts');
     const payrollSyncFn = nodeFn('PayrollSyncFn', 'payroll/sync.ts');
     const taxReportFn = nodeFn('TaxReportFn', 'tax/report.ts');
@@ -58,6 +60,16 @@ export class ApiStack extends Stack {
     const diagnosticsCoverageFn = nodeFn('DiagnosticsCoverageFn', 'diagnostics/coverage.ts');
     const diagnosticsAuditFn = nodeFn('DiagnosticsAuditFn', 'diagnostics/audit.ts');
     const diagnosticsAuthFn = nodeFn('DiagnosticsAuthFn', 'diagnostics/auth-proxy.ts');
+    const diagnosticsCapabilitySecret = String(
+      this.node.tryGetContext('diagnosticsCapabilitySecret') || '',
+    ).trim();
+    if (diagnosticsCapabilitySecret) {
+      diagnosticsAuthFn.addEnvironment('DIAGNOSTICS_CAPABILITY_SECRET', diagnosticsCapabilitySecret);
+    } else {
+      // Local/dev synth fallback. Production: cdk deploy -c diagnosticsCapabilitySecret=...
+      diagnosticsAuthFn.addEnvironment('DIAGNOSTICS_CAPABILITY_SECRET', 'mechpro-dev-diagnostics-capability-v1');
+      diagnosticsAuthFn.addEnvironment('ALLOW_DEV_DIAGNOSTICS_SECRET', '1');
+    }
     const webhookFn = nodeFn('StripeWebhookFn', 'payments/webhook.ts');
     const assistantFn = nodeFn('AssistantFn', 'ai/assistant.ts');
     assistantFn.addEnvironment('BEDROCK_MODEL_ID', 'us.amazon.nova-lite-v1:0');
@@ -66,10 +78,6 @@ export class ApiStack extends Stack {
     const agentPhoneConfigureFn = nodeFn('AgentPhoneConfigureFn', 'ai/agentphone-configure.ts');
     agentPhoneConfigureFn.addEnvironment('API_URL', 'https://njz0co209l.execute-api.us-east-1.amazonaws.com');
     const presignCode = bundledLambdaCode(path.join(__dirname, '..', 'lambda', 'files/presign.ts'));
-    const presignEnv = {
-      TABLE_NAME: props.table.tableName,
-      FILES_BUCKET_NAME: props.filesBucket.bucketName,
-    };
     const presignUploadFn = new lambda.Function(this, 'PresignUploadFn', {
       code: presignCode,
       handler: 'index.handler',
@@ -78,7 +86,7 @@ export class ApiStack extends Stack {
       timeout: Duration.seconds(10),
       memorySize: 256,
       tracing: lambda.Tracing.ACTIVE,
-      environment: presignEnv,
+      environment: { FILES_BUCKET_NAME: props.filesBucket.bucketName },
     });
     const presignDownloadFn = new lambda.Function(this, 'PresignDownloadFn', {
       code: presignCode,
@@ -88,7 +96,7 @@ export class ApiStack extends Stack {
       timeout: Duration.seconds(10),
       memorySize: 256,
       tracing: lambda.Tracing.ACTIVE,
-      environment: presignEnv,
+      environment: { FILES_BUCKET_NAME: props.filesBucket.bucketName },
     });
     props.filesBucket.grantPut(presignUploadFn);
     props.filesBucket.grantRead(presignDownloadFn);
@@ -102,21 +110,28 @@ export class ApiStack extends Stack {
     for (const fn of [entitiesFn, vehicleDecodeFn, payrollSyncFn, taxReportFn, checkoutFn, diagnosticsAuditFn]) {
       props.table.grantReadWriteData(fn);
     }
-    for (const fn of [diagnosticsCoverageFn, diagnosticsAuthFn]) {
-      fn.addToRolePolicy(new iam.PolicyStatement({
-        actions: ['dynamodb:GetItem'],
-        resources: [props.table.tableArn],
-      }));
-    }
+    entitiesFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:AdminUpdateUserAttributes', 'cognito-idp:ListUsers'],
+      resources: [props.userPool.userPoolArn],
+    }));
     props.table.grantReadData(assistantFn);
+    props.table.grantWriteData(assistantFn);
     props.table.grantReadWriteData(agentPhoneWebhookFn);
     assistantFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel'],
-      resources: ['*'],
+      resources: [
+        `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.amazon.nova-lite-v1:0`,
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+        'arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0',
+      ],
     }));
     agentPhoneWebhookFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel'],
-      resources: ['*'],
+      resources: [
+        `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/us.amazon.nova-lite-v1:0`,
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+        'arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0',
+      ],
     }));
     agentPhoneWebhookFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['secretsmanager:GetSecretValue'],
@@ -178,13 +193,7 @@ export class ApiStack extends Stack {
       corsPreflight: {
         allowHeaders: ['Authorization', 'Content-Type', 'If-Match'],
         allowMethods: [apigwv2.CorsHttpMethod.ANY],
-        // Browser SPA + local/dev origins. Bearer tokens still required on routes.
-        allowOrigins: [
-          'https://www.yourcarguy806.com',
-          'https://yourcarguy806.com',
-          'http://127.0.0.1:3000',
-          'http://localhost:3000',
-        ],
+        allowOrigins: APP_ALLOWED_ORIGINS,
       },
     });
 

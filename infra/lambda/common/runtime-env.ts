@@ -1,4 +1,4 @@
-const DEFAULT_APP_URL = 'http://mechprostaticsitestack-mechprositebucket45bd4c2e-9sirc627wf04.s3-website-us-east-1.amazonaws.com';
+const DEFAULT_APP_URL = 'https://www.yourcarguy806.com';
 
 export function envValue(names: string[], env: NodeJS.ProcessEnv = process.env): string | undefined {
   for (const name of names) {

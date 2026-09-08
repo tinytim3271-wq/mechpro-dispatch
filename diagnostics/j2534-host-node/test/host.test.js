@@ -4,14 +4,17 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 
-const socketPath = path.join(os.tmpdir(), `mechpro-j2534-test-${process.pid}.sock`);
+const hostToken = 'test-host-token';
+const socketPath = process.platform === 'win32'
+  ? `\\\\.\\pipe\\mechpro-j2534-test-${process.pid}`
+  : path.join(os.tmpdir(), `mechpro-j2534-test-${process.pid}.sock`);
 
 function rpc(method, params = {}) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
     let buffer = '';
     socket.on('connect', () => {
-      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })}\n`);
+      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { ...params, authToken: hostToken } })}\n`);
     });
     socket.on('data', (chunk) => {
       buffer += chunk.toString();
@@ -27,7 +30,12 @@ function rpc(method, params = {}) {
 
 async function run() {
   const child = spawn(process.execPath, [path.join(__dirname, '..', 'bin', 'start.js')], {
-    env: { ...process.env, MECHPRO_J2534_PIPE: socketPath },
+    env: {
+      ...process.env,
+      MECHPRO_J2534_PIPE: socketPath,
+      MECHPRO_J2534_TOKEN: hostToken,
+      MECHPRO_DIAG_CAPABILITY_SECRET: 'mechpro-dev-diagnostics-capability-v1',
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -63,8 +71,14 @@ async function run() {
   const dtcs = await rpc('readDtcs');
   assert.ok(Array.isArray(dtcs.dtcs));
 
-  const cleared = await rpc('clearDtcs');
+  await assert.rejects(() => rpc('clearDtcs'), /capability token/i);
+  await assert.rejects(() => rpc('clearDtcs', { authorizationToken: 'not-a-real-token' }), /capability token/i);
+
+  const { mintClearDtcsToken } = require('../capability-token');
+  const { token } = mintClearDtcsToken({ vin: vin.vin, shopId: 'test-shop' });
+  const cleared = await rpc('clearDtcs', { authorizationToken: token });
   assert.equal(cleared.cleared, true);
+  await assert.rejects(() => rpc('clearDtcs', { authorizationToken: token }), /already used/i);
 
   await rpc('startLiveLog');
   const log = await rpc('pollLiveLog', { since: 0 });

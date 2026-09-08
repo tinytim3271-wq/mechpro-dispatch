@@ -4,6 +4,14 @@ import { randomUUID } from 'node:crypto';
 import { ddb, TABLE_NAME } from '../common/ddb';
 import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
 import { normalizeWave1EntityPayload, normalizeWave1EntityType } from '../../contracts/wave1-alignment';
+import { paymentGsiSortKey } from '../payments/payment-key';
+import {
+  canReadEntity,
+  canWriteEntity,
+  redactEmployeeForRole,
+  redactEmployeesForRole,
+} from './rbac';
+import { syncEmployeeRoleToCognito } from './cognito-sync';
 
 /** Entity types this generic CRUD handler serves. Each maps to a DynamoDB sort-key prefix. */
 const ENTITY_PREFIXES: Record<string, string> = {
@@ -36,29 +44,15 @@ export function entityPrefix(entityType: unknown) {
 }
 
 const CHAT_TYPES = new Set(['conversations', 'chatmessages']);
-const FINANCIAL_WRITE_ROLES: Record<string, string[]> = {
-  invoices: ['admin', 'office', 'service_writer'],
-  payments: ['admin', 'office', 'service_writer'],
-  expenses: ['admin', 'office'],
-  payrollentries: ['admin'],
-};
-const MANUAL_PAYMENT_STATUSES = new Set(['pending', 'recorded', 'completed', 'failed', 'canceled']);
 
-/** Stripe-completed payments are webhook-only; clients may only create pending Stripe rows or manual receipts. */
-export function sanitizeClientPaymentWrite(body: Record<string, unknown>) {
-  const next = { ...body };
-  const processor = String(next.processor || '').toLowerCase();
-  const status = String(next.status || 'pending').toLowerCase();
-  const id = String(next.id || '');
-  if (id.startsWith('cs_') || id.startsWith('pi_') || processor === 'stripe') {
-    next.processor = 'stripe';
-    next.status = 'pending';
-    delete next.processorTransactionId;
-    return next;
+export { canReadEntity, canWriteEntity, redactEmployeeForRole } from './rbac';
+
+
+export function gsiSortKey(entityType: string, body: Record<string, unknown>, id: string): string {
+  if (entityType === 'payments' || entityType === 'PAYMENT') {
+    return paymentGsiSortKey(body.invoiceNumber, body.createdAt || body.date || id, id);
   }
-  next.status = MANUAL_PAYMENT_STATUSES.has(status) ? status : 'pending';
-  delete next.processorTransactionId;
-  return next;
+  return `${body.date || body.createdAt || id}#${id}`;
 }
 
 function memberEmails(value: unknown): string[] {
@@ -118,13 +112,13 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     const pk = `SHOP#${ctx.shopId}`;
     const method = event.requestContext.http.method;
+    const isWrite = method !== 'GET';
 
-    if (entityType === 'employees' && method !== 'GET' && ctx.role !== 'admin') {
-      return json(403, { message: 'Only administrators can manage employee profiles' });
-    }
-    const allowedFinancialRoles = FINANCIAL_WRITE_ROLES[entityType!];
-    if (allowedFinancialRoles && method !== 'GET' && !allowedFinancialRoles.includes(ctx.role)) {
+    if (isWrite && !canWriteEntity(entityType!, ctx.role)) {
       return json(403, { message: `Role ${ctx.role} cannot modify ${entityType}` });
+    }
+    if (!isWrite && !canReadEntity(entityType!, ctx.role)) {
+      return json(403, { message: `Role ${ctx.role} cannot read ${entityType}` });
     }
 
     if (method === 'GET' && !id) {
@@ -133,8 +127,10 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
         ExpressionAttributeValues: { ':pk': pk, ':prefix': `${prefix}#` },
       }));
-      const items = (result.Items ?? []) as Record<string, unknown>[];
-      return json(200, await visibleChatItems(pk, entityType!, items, ctx.email));
+      let items = (result.Items ?? []) as Record<string, unknown>[];
+      items = await visibleChatItems(pk, entityType!, items, ctx.email);
+      if (entityType === 'employees') items = redactEmployeesForRole(items, ctx.role);
+      return json(200, items);
     }
 
     if (method === 'GET' && id) {
@@ -143,12 +139,15 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         const visible = await visibleChatItems(pk, entityType!, [result.Item], ctx.email);
         if (!visible.length) return json(404, { message: 'Not found' });
       }
-      return result.Item ? json(200, result.Item) : json(404, { message: 'Not found' });
+      if (!result.Item) return json(404, { message: 'Not found' });
+      const item = entityType === 'employees'
+        ? redactEmployeeForRole(result.Item as Record<string, unknown>, ctx.role)
+        : result.Item;
+      return json(200, item);
     }
 
     if (method === 'POST') {
       let body = normalizeWave1EntityPayload(rawEntityType, JSON.parse(event.body || '{}'));
-      if (entityType === 'payments') body = sanitizeClientPaymentWrite(body);
       if (entityType === 'conversations') {
         const kind = String(body.kind || '');
         if (!['direct', 'group'].includes(kind)) return json(400, { message: 'Conversation kind must be direct or group' });
@@ -175,18 +174,24 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         pk,
         sk: `${prefix}#${newId}`,
         gsi1pk: `${pk}#TYPE#${prefix}`,
-        gsi1sk: `${body.date || body.createdAt || newId}#${newId}`,
+        gsi1sk: gsiSortKey(entityType!, body as Record<string, unknown>, String(newId)),
         shopId: ctx.shopId,
         createdBy: ctx.userId,
         updatedAt: new Date().toISOString(),
       };
       await ddb.send(new PutCommand({ TableName: TABLE_NAME, Item: item }));
+      if (entityType === 'employees') {
+        try {
+          await syncEmployeeRoleToCognito(String((item as Record<string, unknown>).email || ''), String((item as Record<string, unknown>).role || ''));
+        } catch (error) {
+          console.error('Failed to sync employee role to Cognito', error);
+        }
+      }
       return json(201, item);
     }
 
     if (method === 'PUT' && id) {
-      let body = normalizeWave1EntityPayload(rawEntityType, JSON.parse(event.body || '{}'));
-      if (entityType === 'payments') body = sanitizeClientPaymentWrite(body);
+      const body = normalizeWave1EntityPayload(rawEntityType, JSON.parse(event.body || '{}'));
       if (entityType === 'chatmessages') return json(405, { message: 'Chat messages cannot be edited' });
       if (entityType === 'conversations') {
         const existing = await getEntity(pk, prefix, id);
@@ -205,7 +210,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         pk,
         sk: `${prefix}#${id}`,
         gsi1pk: `${pk}#TYPE#${prefix}`,
-        gsi1sk: `${body.date || body.createdAt || id}#${id}`,
+        gsi1sk: gsiSortKey(entityType!, body as Record<string, unknown>, String(id)),
         shopId: ctx.shopId,
         updatedAt: new Date().toISOString(),
       };
@@ -217,6 +222,13 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
           ExpressionAttributeValues: { ':expectedUpdatedAt': expectedUpdatedAt },
         } : {}),
       }));
+      if (entityType === 'employees') {
+        try {
+          await syncEmployeeRoleToCognito(String((item as Record<string, unknown>).email || ''), String((item as Record<string, unknown>).role || ''));
+        } catch (error) {
+          console.error('Failed to sync employee role to Cognito', error);
+        }
+      }
       return json(200, item);
     }
 

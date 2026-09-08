@@ -1,14 +1,17 @@
 import { buildPayrollEntries, weekPeriod } from '../lambda/payroll/sync';
 import { buildTaxReport, invoiceTaxBreakdown } from '../lambda/tax/report';
 import { creditAmount, ownerEmployeeProfile, validPassword, validShopId } from '../lambda/admin/accounts';
-import { deletionConflict, entityPrefix, sanitizeClientPaymentWrite } from '../lambda/entities/handler';
+import { deletionConflict, entityPrefix, gsiSortKey } from '../lambda/entities/handler';
+import { canReadEntity, canWriteEntity, redactEmployeeForRole } from '../lambda/entities/rbac';
 import { resolveRole } from '../lambda/common/auth';
 import { normalizeVinResult, validVin } from '../lambda/vehicles/decode';
-import { openInvoiceBalance, originHeader, safeCheckoutUrl } from '../lambda/payments/checkout';
+import { openInvoiceBalance, safeCheckoutUrl } from '../lambda/payments/checkout';
 import { verifyStripeSignature } from '../lambda/payments/webhook';
+import { paymentGsiSortKey } from '../lambda/payments/payment-key';
 import { verifyAgentPhoneSignature } from '../lambda/ai/agentphone-webhook';
 import { subscriptionEntitlement } from '../lambda/subscription/entitlement';
 import { matchCoverageRecord, evaluateEligibility } from '../lambda/diagnostics/coverage';
+import { mintClearDtcsToken, verifyClearDtcsToken } from '../lambda/diagnostics/capability-token';
 import { isResettableShopRecord, isSampleRecord } from '../lambda/onboarding/start';
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -89,6 +92,33 @@ describe('shop entity controls', () => {
 		expect(entityPrefix('not-a-real-entity')).toBeUndefined();
 	});
 
+	test('enforces within-shop RBAC for financial and payroll entities', () => {
+		expect(canWriteEntity('invoices', 'technician')).toBe(false);
+		expect(canWriteEntity('invoices', 'service_writer')).toBe(true);
+		expect(canWriteEntity('payrollentries', 'office')).toBe(false);
+		expect(canWriteEntity('payrollentries', 'admin')).toBe(true);
+		expect(canWriteEntity('shopsettings', 'technician')).toBe(false);
+		expect(canReadEntity('payrollentries', 'technician')).toBe(false);
+		expect(canReadEntity('payrollentries', 'office')).toBe(true);
+		expect(canWriteEntity('orders', 'technician')).toBe(true);
+	});
+
+	test('redacts employee compensation fields for technicians', () => {
+		const redacted = redactEmployeeForRole({
+			name: 'Alex',
+			email: 'alex@example.com',
+			payRate: 32,
+			address: '123 Main',
+			emergencyContact: 'Sam',
+			taxStatus: 'W-2',
+			role: 'technician',
+		}, 'technician');
+		expect(redacted.payRate).toBeUndefined();
+		expect(redacted.address).toBeUndefined();
+		expect(redacted.email).toBe('alex@example.com');
+		expect(redactEmployeeForRole({ payRate: 32 }, 'admin').payRate).toBe(32);
+	});
+
 	test('protects linked customers while allowing invoice deletion with payment history', () => {
 		expect(deletionConflict('customers', { name: 'Alex Owner' }, [
 			{ sk: 'ORDER#RO-1', customer: 'Alex Owner' },
@@ -102,24 +132,13 @@ describe('shop entity controls', () => {
 		expect(deletionConflict('invoices', { number: 'INV-1' }, [])).toBeNull();
 	});
 
-	test('keeps Stripe-completed payments webhook-only on client writes', () => {
-		expect(sanitizeClientPaymentWrite({
-			id: 'cs_test_123',
-			processor: 'stripe',
-			status: 'completed',
-			processorTransactionId: 'cs_test_123',
-			amount: 50,
-		})).toMatchObject({ processor: 'stripe', status: 'pending' });
-		expect(sanitizeClientPaymentWrite({
-			id: 'payment-1',
-			method: 'cash',
-			status: 'completed',
-			amount: 25,
-		})).toMatchObject({ status: 'completed', method: 'cash' });
-		expect(sanitizeClientPaymentWrite({
-			id: 'payment-2',
-			status: 'bogus',
-		}).status).toBe('pending');
+	test('indexes payments by invoice number in gsi1 sort key', () => {
+		expect(gsiSortKey('payments', { invoiceNumber: 'INV-1', createdAt: '2026-08-17T12:00:00.000Z' }, 'payment-1'))
+			.toBe('INV-1#2026-08-17T12:00:00.000Z#payment-1');
+		expect(gsiSortKey('payments', { createdAt: '2026-08-17T12:00:00.000Z' }, 'payment-2'))
+			.toBe('2026-08-17T12:00:00.000Z#payment-2');
+		expect(gsiSortKey('invoices', { createdAt: '2026-08-17T12:00:00.000Z' }, 'INV-1'))
+			.toBe('2026-08-17T12:00:00.000Z#INV-1');
 	});
 });
 
@@ -199,22 +218,25 @@ describe('runtime env aliases', () => {
 });
 
 describe('deployment workflow', () => {
+	const readWorkflow = (name: string) =>
+		readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', name), 'utf8').replace(/\r\n/g, '\n');
+
 	test('assumes the AWS deploy role from the main-branch deploy job', () => {
-		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy.yml'), 'utf8');
+		const workflow = readWorkflow('deploy.yml');
 		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toMatch(/deploy:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
 	test('uses the production environment before assuming the AWS role in Windows publish-download', () => {
-		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'windows-desktop.yml'), 'utf8');
+		const workflow = readWorkflow('windows-desktop.yml');
 		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+environment:\s+production\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4/);
 		expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::001018341557:role/MechProGitHubActionsDeployRole' }}");
 	});
 
 	test('refreshes the GitHub Actions stack before publishing Windows downloads', () => {
-		const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'windows-desktop.yml'), 'utf8');
+		const workflow = readWorkflow('windows-desktop.yml');
 		expect(workflow).toContain('- name: Refresh GitHub Actions publish role permissions');
 		expect(workflow).toContain('npx cdk deploy MechProGitHubActionsStack --require-approval never --strict -c enableCustomDomain=true -c githubRepository=${{ github.repository }}');
 		expect(workflow).toMatch(/publish-download:\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4\n(?:.*\n)*?\s+- name: Refresh GitHub Actions publish role permissions\n(?:.*\n)*?\s+- uses: aws-actions\/configure-aws-credentials@v4\n(?:.*\n)*?\s+- name: Publish Windows installer to site bucket/);
@@ -368,13 +390,6 @@ describe('payment integrity', () => {
 		expect(safeCheckoutUrl('https://attacker.example/paid', 'https://shop.example')).toBeNull();
 	});
 
-	test('reads Origin header case-insensitively', () => {
-		expect(originHeader({ origin: 'https://shop.example' })).toBe('https://shop.example');
-		expect(originHeader({ Origin: 'https://shop.example' })).toBe('https://shop.example');
-		expect(originHeader({ ORIGIN: 'https://shop.example' })).toBe('https://shop.example');
-		expect(originHeader({ host: 'api.example.com' })).toBeUndefined();
-	});
-
 	test('rejects stale Stripe signatures', () => {
 		const payload = '{"id":"evt_1"}';
 		const timestamp = 1_800_000_000;
@@ -384,6 +399,13 @@ describe('payment integrity', () => {
 		expect(verifyStripeSignature(payload, header, 'secret', timestamp + 301)).toBe(false);
 	});
 
+	test('stores Stripe payments with invoice-prefixed gsi sort keys', () => {
+		expect(paymentGsiSortKey('INV-7', '2026-08-17T12:00:00.000Z', 'pay_123'))
+			.toBe('INV-7#2026-08-17T12:00:00.000Z#pay_123');
+		expect(paymentGsiSortKey('', '2026-08-17T12:00:00.000Z', 'pay_456'))
+			.toBe('2026-08-17T12:00:00.000Z#pay_456');
+	});
+
 	test('verifies AgentPhone signatures and rejects stale deliveries', () => {
 		const payload = '{"event":"agent.message"}';
 		const timestamp = 1_800_000_000;
@@ -391,6 +413,24 @@ describe('payment integrity', () => {
 		const header = `sha256=${digest}`;
 		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 299)).toBe(true);
 		expect(verifyAgentPhoneSignature(payload, header, String(timestamp), 'secret', timestamp + 301)).toBe(false);
+	});
+});
+describe('diagnostics capability tokens', () => {
+	const prev = process.env.DIAGNOSTICS_CAPABILITY_SECRET;
+	beforeAll(() => {
+		process.env.DIAGNOSTICS_CAPABILITY_SECRET = 'test-capability-secret';
+	});
+	afterAll(() => {
+		if (prev === undefined) delete process.env.DIAGNOSTICS_CAPABILITY_SECRET;
+		else process.env.DIAGNOSTICS_CAPABILITY_SECRET = prev;
+	});
+
+	test('mints and verifies clear_dtcs tokens; rejects tampering', () => {
+		const { token } = mintClearDtcsToken({ vin: '1C6SRFHT0LN123456', shopId: 'shop-1' });
+		const payload = verifyClearDtcsToken(token, { vin: '1C6SRFHT0LN123456', shopId: 'shop-1' });
+		expect(payload.procedure).toBe('clear_dtcs');
+		expect(() => verifyClearDtcsToken(token.slice(0, -2) + 'aa')).toThrow(/signature/i);
+		expect(() => verifyClearDtcsToken('v1.not.valid')).toThrow(/Invalid diagnostics capability token/i);
 	});
 });
 

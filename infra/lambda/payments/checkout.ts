@@ -2,9 +2,10 @@ import { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyResultV2 } from
 import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { ddb, TABLE_NAME } from '../common/ddb';
-import { requestContext, requireActiveAccount, AuthError } from '../common/auth';
+import { requestContext, requireActiveAccount, requireRole, AuthError } from '../common/auth';
 
 const secretsClient = new SecretsManagerClient({});
+const INVOICE_PAYMENT_GSI_ROLLOUT_AT = Date.parse('2026-09-04T00:00:00.000Z');
 
 export function openInvoiceBalance(invoiceAmount: unknown, payments: Record<string, unknown>[]): number {
   const paid = payments
@@ -22,12 +23,20 @@ export function safeCheckoutUrl(value: unknown, requestOrigin: string | undefine
   }
 }
 
-export function originHeader(headers: Record<string, string | undefined> | undefined): string | undefined {
+export function headerValue(headers: Record<string, string | undefined> | undefined, name: string): string | undefined {
   if (!headers) return undefined;
-  for (const [name, value] of Object.entries(headers)) {
-    if (name.toLowerCase() === 'origin') return value;
+  const target = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === target) return value;
   }
   return undefined;
+}
+
+export function needsLegacyPaymentFallback(invoice: Record<string, unknown> | undefined): boolean {
+  const createdAt = String(invoice?.createdAt || '').trim();
+  if (!createdAt) return true;
+  const createdAtMillis = Date.parse(createdAt);
+  return Number.isNaN(createdAtMillis) || createdAtMillis < INVOICE_PAYMENT_GSI_ROLLOUT_AT;
 }
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
@@ -45,6 +54,7 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
   try {
     const ctx = requestContext(event);
     await requireActiveAccount(ctx);
+    requireRole(ctx, ['admin', 'office', 'service_writer']);
     const pk = `SHOP#${ctx.shopId}`;
     const body = JSON.parse(event.body || '{}');
     const { invoiceNumber } = body;
@@ -60,12 +70,13 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     let lastEvaluatedKey: Record<string, unknown> | undefined;
     const payments: Record<string, unknown>[] = [];
-    const paymentPrefix = `PAYMENT#${invoiceNumber}#`;
+    const invoicePaymentPrefix = `${String(invoiceNumber)}#`;
     do {
       const page = await ddb.send(new QueryCommand({
         TableName: TABLE_NAME,
-        KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
-        ExpressionAttributeValues: { ':pk': pk, ':prefix': paymentPrefix },
+        IndexName: 'gsi1',
+        KeyConditionExpression: 'gsi1pk = :gsi1pk and begins_with(gsi1sk, :invoicePaymentPrefix)',
+        ExpressionAttributeValues: { ':gsi1pk': `${pk}#TYPE#PAYMENT`, ':invoicePaymentPrefix': invoicePaymentPrefix },
         ProjectionExpression: 'amount, #status',
         ExpressionAttributeNames: { '#status': 'status' },
         ExclusiveStartKey: lastEvaluatedKey as any,
@@ -73,10 +84,26 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       lastEvaluatedKey = page.LastEvaluatedKey as any;
       payments.push(...(page.Items ?? []));
     } while (lastEvaluatedKey);
+    if (!payments.length && needsLegacyPaymentFallback(invoice as Record<string, unknown> | undefined)) {
+      let legacyLastEvaluatedKey: Record<string, unknown> | undefined;
+      do {
+        const legacyPage = await ddb.send(new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
+          ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#', ':invoiceNumber': invoiceNumber },
+          ProjectionExpression: 'invoiceNumber, amount, #status, gsi1sk',
+          ExpressionAttributeNames: { '#status': 'status' },
+          FilterExpression: 'invoiceNumber = :invoiceNumber',
+          ExclusiveStartKey: legacyLastEvaluatedKey as any,
+        }));
+        legacyLastEvaluatedKey = legacyPage.LastEvaluatedKey as any;
+        payments.push(...(legacyPage.Items ?? []));
+      } while (legacyLastEvaluatedKey);
+    }
     const balance = openInvoiceBalance(invoice.amount, payments);
     if (balance <= 0) return json(409, { message: 'Invoice has no open balance' });
 
-    const requestOrigin = originHeader(event.headers);
+    const requestOrigin = headerValue(event.headers, 'origin');
     const successUrl = safeCheckoutUrl(body.successUrl, requestOrigin);
     const cancelUrl = safeCheckoutUrl(body.cancelUrl, requestOrigin);
     if (!successUrl || !cancelUrl) return json(400, { message: 'Checkout redirects must match the requesting site' });
