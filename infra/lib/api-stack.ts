@@ -12,7 +12,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import { bundledLambdaCode } from './esbuild-asset';
-import { APP_ALLOWED_ORIGINS } from './allowed-origins';
+import { allowedOriginsWithContext } from './allowed-origins';
 
 export interface ApiStackProps extends StackProps {
   table: dynamodb.Table;
@@ -193,7 +193,7 @@ export class ApiStack extends Stack {
       corsPreflight: {
         allowHeaders: ['Authorization', 'Content-Type', 'If-Match'],
         allowMethods: [apigwv2.CorsHttpMethod.ANY],
-        allowOrigins: APP_ALLOWED_ORIGINS,
+        allowOrigins: allowedOriginsWithContext(this.node.tryGetContext('extraAllowedOrigins')),
       },
     });
 

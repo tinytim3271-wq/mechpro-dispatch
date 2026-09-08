@@ -513,6 +513,7 @@
   var platformAccounts = null;
   var platformAccountsLoading = false;
   var elmPort = null;
+  var pendingAuthProfile = null;
   var usStates = [{ code: "AL", name: "Alabama" }, { code: "AK", name: "Alaska" }, { code: "AZ", name: "Arizona" }, { code: "AR", name: "Arkansas" }, { code: "CA", name: "California" }, { code: "CO", name: "Colorado" }, { code: "CT", name: "Connecticut" }, { code: "DE", name: "Delaware" }, { code: "DC", name: "District of Columbia" }, { code: "FL", name: "Florida" }, { code: "GA", name: "Georgia" }, { code: "HI", name: "Hawaii" }, { code: "ID", name: "Idaho" }, { code: "IL", name: "Illinois" }, { code: "IN", name: "Indiana" }, { code: "IA", name: "Iowa" }, { code: "KS", name: "Kansas" }, { code: "KY", name: "Kentucky" }, { code: "LA", name: "Louisiana" }, { code: "ME", name: "Maine" }, { code: "MD", name: "Maryland" }, { code: "MA", name: "Massachusetts" }, { code: "MI", name: "Michigan" }, { code: "MN", name: "Minnesota" }, { code: "MS", name: "Mississippi" }, { code: "MO", name: "Missouri" }, { code: "MT", name: "Montana" }, { code: "NE", name: "Nebraska" }, { code: "NV", name: "Nevada" }, { code: "NH", name: "New Hampshire" }, { code: "NJ", name: "New Jersey" }, { code: "NM", name: "New Mexico" }, { code: "NY", name: "New York" }, { code: "NC", name: "North Carolina" }, { code: "ND", name: "North Dakota" }, { code: "OH", name: "Ohio" }, { code: "OK", name: "Oklahoma" }, { code: "OR", name: "Oregon" }, { code: "PA", name: "Pennsylvania" }, { code: "RI", name: "Rhode Island" }, { code: "SC", name: "South Carolina" }, { code: "SD", name: "South Dakota" }, { code: "TN", name: "Tennessee" }, { code: "TX", name: "Texas" }, { code: "UT", name: "Utah" }, { code: "VT", name: "Vermont" }, { code: "VA", name: "Virginia" }, { code: "WA", name: "Washington" }, { code: "WV", name: "West Virginia" }, { code: "WI", name: "Wisconsin" }, { code: "WY", name: "Wyoming" }];
   function sanitizeUsers(users) {
     return users.map(({ password, ...user }) => user);
@@ -963,12 +964,21 @@
     const user = currentUser();
     return user?.role === "technician" ? state.orders.filter((order) => order.tech === user.techName) : state.orders;
   }
-  function weekPeriod(date = /* @__PURE__ */ new Date("2026-08-14T12:00:00")) {
+  function weekPeriod(date = /* @__PURE__ */ new Date()) {
     const day = date.getDay(), monday = new Date(date);
     monday.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
+    monday.setHours(0, 0, 0, 0);
     const friday = new Date(monday);
     friday.setDate(monday.getDate() + 4);
     return { key: monday.toISOString().slice(0, 10), start: monday.toLocaleDateString("en-US", { month: "short", day: "numeric" }), end: friday.toLocaleDateString("en-US", { month: "short", day: "numeric" }) };
+  }
+  function shopDayLabel(date = /* @__PURE__ */ new Date()) {
+    return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  }
+  function relativePromiseHint() {
+    const tomorrow = /* @__PURE__ */ new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return `Tomorrow, ${tomorrow.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
   }
   function employeeByTech(name) {
     return state.users.find((user) => user.techName === name && user.active);
@@ -980,7 +990,7 @@
     const hours = Number(order.laborHours ?? Number(order.labor || 0) / 165);
     if (!hours) return;
     const period = weekPeriod(), entry = state.payrollEntries.find((item) => item.workOrderId === order.id);
-    const line = { id: order.id, workOrderId: order.id, employeeId: employee.id, periodKey: period.key, roNumber: order.id, customer: order.customer, vehicle: order.vehicle, hours, rate: Number(employee.payRate || 0), amount: hours * Number(employee.payRate || 0), completedAt: "2026-08-14" };
+    const line = { id: order.id, workOrderId: order.id, employeeId: employee.id, periodKey: period.key, roNumber: order.id, customer: order.customer, vehicle: order.vehicle, hours, rate: Number(employee.payRate || 0), amount: hours * Number(employee.payRate || 0), completedAt: now() };
     if (entry) {
       Object.assign(entry, line);
       updatePayrollEntryInApi(entry);
@@ -1091,7 +1101,7 @@
     return visibleOrders().filter((x) => (filter === "all" || (filter === "active" ? !["completed", "invoiced"].includes(x.status) : ["completed", "invoiced"].includes(x.status))) && (!q || [x.id, x.customer, x.vehicle, x.vin, x.complaint, x.tech].some((v) => String(v).toLowerCase().includes(q))));
   }
   function stats() {
-    const tech = currentUser()?.role === "technician", orders2 = visibleOrders(), paid = state.invoices.filter((x) => x.status === "paid").reduce((s, x) => s + x.amount, 0), cells = tech ? [["clipboard-check", "My open orders", orders2.filter((x) => !["completed", "invoiced"].includes(x.status)).length, "Assigned to you", "good"], ["circle-play", "In progress", orders2.filter((x) => x.status === "in_progress").length, "Active repairs", ""], ["triangle-alert", "Waiting on parts", orders2.filter((x) => x.status === "waiting_parts").length, "Parts follow-up needed", "warn"]] : [["clipboard-check", "Open work orders", orders2.filter((x) => !["completed", "invoiced"].includes(x.status)).length, "+2 since yesterday", "good"], ["circle-play", "In progress", orders2.filter((x) => x.status === "in_progress").length, "3 bays available", ""], ["triangle-alert", "Waiting on parts", orders2.filter((x) => x.status === "waiting_parts").length, "1 delivery today", "warn"], ["badge-dollar-sign", "Collected this week", money(paid), "+12.4% vs last week", "good"], ["clock-alert", "Overdue invoices", state.invoices.filter((x) => x.status === "overdue").length, "$2,123.08 outstanding", "warn"]];
+    const tech = currentUser()?.role === "technician", orders2 = visibleOrders(), openCount = orders2.filter((x) => !["completed", "invoiced"].includes(x.status)).length, inProgress = orders2.filter((x) => x.status === "in_progress").length, waiting = orders2.filter((x) => x.status === "waiting_parts").length, paid = state.invoices.filter((x) => x.status === "paid").reduce((s, x) => s + x.amount, 0), overdue = state.invoices.filter((x) => x.status === "overdue"), overdueTotal = overdue.reduce((s, x) => s + Number(x.amount || 0), 0), baysInUse = new Set(orders2.filter((x) => x.status === "in_progress" && x.bay && x.bay !== "Unassigned" && x.bay !== "Mobile").map((x) => x.bay)).size, cells = tech ? [["clipboard-check", "My open orders", openCount, "Assigned to you", "good"], ["circle-play", "In progress", inProgress, "Active repairs", ""], ["triangle-alert", "Waiting on parts", waiting, "Parts follow-up needed", "warn"]] : [["clipboard-check", "Open work orders", openCount, `${openCount} active in shop`, "good"], ["circle-play", "In progress", inProgress, `${baysInUse} bay${baysInUse === 1 ? "" : "s"} in use`, ""], ["triangle-alert", "Waiting on parts", waiting, waiting ? `${waiting} need parts follow-up` : "No parts holds", "warn"], ["badge-dollar-sign", "Collected (paid invoices)", money(paid), "From paid invoice register", "good"], ["clock-alert", "Overdue invoices", overdue.length, overdue.length ? `${money(overdueTotal)} outstanding` : "None overdue", "warn"]];
     return `<div class="stats ${tech ? "tech-stats" : ""}">${cells.map((x) => `<div class="stat"><div class="stat-top"><span>${x[1]}</span>${icon(x[0])}</div><div class="stat-value">${x[2]}</div><div class="stat-note ${x[4]}">${x[3]}</div></div>`).join("")}</div>`;
   }
   function toolbar() {
@@ -1105,26 +1115,20 @@
       const items = orders2.filter((x) => x.status === s);
       return `<section class="lane"><div class="lane-head"><span class="status-dot ${s}"></span><h3>${label(s)}</h3><span class="lane-count">${items.length}</span></div><div class="lane-body">${items.length ? items.map(card).join("") : `<div class="empty-lane">No work orders</div>`}</div></section>`;
     }).join("");
-    return shell(`${heading("Friday \xB7 August 14, 2026", "Dispatch board", "Live shop workload, technician assignments, and promise times.")}${stats()}${toolbar()}<div class="board">${lanes}</div>`);
+    return shell(`${heading(shopDayLabel(), "Dispatch board", "Live shop workload, technician assignments, and promise times.")}${stats()}${toolbar()}<div class="board">${lanes}</div>`);
   }
   function orders() {
     const rows = filtered().map((x) => `<tr data-order="${x.id}"><td class="mono strong">${x.id}</td><td><b>${x.customer}</b><small>${x.phone}</small></td><td><b>${x.vehicle}</b><small class="mono">${x.vin}</small></td><td>${badge(x.status)}</td><td>${x.tech}<small>${x.bay}</small></td><td>${x.promise}</td><td><b>${money(x.total)}</b></td></tr>`).join("");
     return shell(`${heading("Operations", "Work orders", "Every estimate, repair, and completed job in one searchable queue.")}${toolbar()}<div class="data-panel"><table><thead><tr><th>RO number</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Assignment</th><th>Promise</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>${rows ? "" : empty("No matching work orders")}</div>`);
   }
   function schedule() {
-    const days = ["Mon 10", "Tue 11", "Wed 12", "Thu 13", "Fri 14"], times = ["8:00 AM", "9:00 AM", "10:30 AM", "1:00 PM", "3:00 PM"], orders2 = visibleOrders();
-    let cells = `<div class="schedule-cell schedule-head"></div>${days.map((x) => `<div class="schedule-cell schedule-head">${x}</div>`).join("")}`;
-    times.forEach((time, row) => {
-      cells += `<div class="schedule-cell schedule-time">${time}</div>`;
-      days.forEach((_, col) => {
-        const x = col === 4 ? orders2[row] : null;
-        cells += `<div class="schedule-cell">${x ? `<button class="schedule-job ${x.mobile ? "mobile" : ""}" data-order="${x.id}"><b>${x.id} \xB7 ${x.customer}</b><span>${x.vehicle}</span><span>${x.tech} \xB7 ${x.bay}</span></button>` : ""}</div>`;
-      });
-    });
-    return shell(`${heading("Shop calendar", "Schedule", currentUser().role === "technician" ? "Your assigned appointments and mobile service calls." : "A week view of bay appointments and mobile service calls.")}<div class="toolbar"><button class="secondary">${icon("chevron-left", 14)}</button><div class="tabs"><button class="tab active">Week</button><button class="tab">Day</button></div><button class="secondary">Today</button><button class="secondary">${icon("chevron-right", 14)}</button></div><div class="schedule-grid">${cells}</div>`);
+    return scheduleWorkspace();
   }
   function customers() {
-    const q = query.toLowerCase(), cards = state.customers.filter((x) => !q || Object.values(x).join(" ").toLowerCase().includes(q)).map((x) => `<article class="customer-card" data-open-customer="${encodeURIComponent(x.name)}"><div class="customer-top"><div class="avatar">${initials(x.name)}</div><div><h3>${x.name}</h3><p>${x.phone} \xB7 ${x.email}</p></div></div><div class="customer-stats"><div><span>Vehicles</span><b>${x.vehicles}</b></div><div><span>Lifetime spend</span><b>${money(x.spend)}</b></div><div><span>Shop visits</span><b>${x.visits}</b></div><div><span>Last visit</span><b>Aug 2026</b></div></div><div class="customer-card-actions"><button class="customer-message" data-message-customer="${encodeURIComponent(x.name)}" data-message-phone="${encodeURIComponent(x.phone || "")}" data-message-email="${encodeURIComponent(x.email || "")}">${icon("send", 14)} Message</button><button class="mini-action" data-open-customer="${encodeURIComponent(x.name)}">${icon("user", 14)} Details</button></div></article>`).join("");
+    const q = query.toLowerCase(), cards = state.customers.filter((x) => !q || Object.values(x).join(" ").toLowerCase().includes(q)).map((x) => {
+      const visitCount = state.orders.filter((o) => o.customer === x.name).length;
+      return `<article class="customer-card" data-open-customer="${encodeURIComponent(x.name)}"><div class="customer-top"><div class="avatar">${initials(x.name)}</div><div><h3>${escapeHtml(x.name)}</h3><p>${escapeHtml(x.phone)} \xB7 ${escapeHtml(x.email)}</p></div></div><div class="customer-stats"><div><span>Vehicles</span><b>${x.vehicles}</b></div><div><span>Lifetime spend</span><b>${money(x.spend)}</b></div><div><span>Shop visits</span><b>${Math.max(Number(x.visits) || 0, visitCount)}</b></div><div><span>Linked ROs</span><b>${visitCount || "None"}</b></div></div><div class="customer-card-actions"><button class="customer-message" data-message-customer="${encodeURIComponent(x.name)}" data-message-phone="${encodeURIComponent(x.phone || "")}" data-message-email="${encodeURIComponent(x.email || "")}">${icon("send", 14)} Message</button><button class="mini-action" data-open-customer="${encodeURIComponent(x.name)}">${icon("user", 14)} Details</button></div></article>`;
+    }).join("");
     return shell(`${heading("Relationships", "Customers", "Customer contact details, vehicles, and service value at a glance.")}<div class="customer-grid">${cards}</div>`);
   }
   var inspectionPoints = ["Exterior lights", "Windshield", "Wiper blades", "Washer operation", "Mirrors", "Horn", "Seat belts", "Warning lights", "Battery condition", "Battery terminals", "Charging system", "Engine oil", "Coolant", "Brake fluid", "Power steering fluid", "Transmission fluid", "Belts", "Hoses", "Air filter", "Cabin filter", "Fuel system leaks", "Exhaust system", "Front brake pads", "Rear brake pads", "Brake rotors/drums", "Brake hoses/lines", "Parking brake", "Steering components", "Front suspension", "Rear suspension", "CV boots/U-joints", "Wheel bearings", "Tire tread LF", "Tire tread RF", "Tire tread LR", "Tire tread RR"];
@@ -1748,7 +1752,8 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
     return shell(`${heading("Administration", "Shop settings", "Core business defaults used throughout MechPro.", false)}<div class="settings-panel"><div class="form-grid"><label>Shop name<input value="Your Car Guy"/></label><label>Phone<input value="555-0100"/></label><label class="full">Address<input value="100 Demo Street, Example City, TX 00000"/></label><label>Default labor rate<input value="$165.00 / hr"/></label><label>Sales tax<input value="8.25%"/></label><label>Service bays<input value="4"/></label><label>SMS notifications<select><option>Enabled</option><option>Disabled</option></select></label></div><button class="primary settings-save">${icon("save", 15)} Save settings</button></div><div class="settings-panel"><div class="statement-head"><div><div class="eyebrow">Tax filing</div><h2>Subscribing state & filing details</h2></div>${icon("landmark", 18)}</div><form class="form-grid" id="tax-settings-form"><label>Filing state *<select name="state" required>${stateOptions}</select></label><label>State tax ID<input name="taxId" value="${t.taxId}" placeholder="e.g. 1-234-5678-9"/></label><label>Default sales tax rate % *<input name="rate" type="number" step=".01" min="0" value="${t.rate}" required/></label><label>Filing frequency<select name="filingFrequency"><option ${t.filingFrequency === "Monthly" ? "selected" : ""}>Monthly</option><option ${t.filingFrequency === "Quarterly" ? "selected" : ""}>Quarterly</option><option ${t.filingFrequency === "Annually" ? "selected" : ""}>Annually</option></select></label><div class="full"><button class="primary" type="submit">${icon("save", 14)} Save tax settings</button></div></form></div>`);
   }
   function loginScreen() {
-    return `<main class="login-screen"><section class="login-panel"><div class="brand login-brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders${isDesktopApp2 ? " \xB7 Windows" : ""}</small></div></div><div class="eyebrow">Secure team access</div><h1>Sign in to your workspace</h1><p>${isDesktopApp2 ? "An internet connection and active subscription are required." : "Use the employee login created by your Administrator."}</p><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required placeholder="you@yourcarguy.com"/></label><label>Password<input name="password" type="password" autocomplete="current-password" required placeholder="Password"/></label><p class="login-error" id="login-error" ${desktopLoginMessage ? "" : "hidden"}>${escapeHtml(desktopLoginMessage || "Incorrect email or password.")}</p><button class="primary" type="submit">${icon("log-in", 15)} Sign in</button></form><button class="login-reset" type="button" onclick="openPasswordReset()">Forgot password?</button>${isDesktopApp2 ? "" : `<div class="login-downloads"><a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.exe" download>Download MechPro installer (.exe)</a><a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.zip" download>Download portable zip</a></div>`}<div class="login-help"><strong>${isDesktopApp2 ? "Online subscription verification" : "Cognito-backed account"}</strong><span>${isDesktopApp2 ? "Access is checked at sign-in and while the app is running." : "Contact your Administrator if you need access."}</span></div></section></main>`;
+    const offline = !navigator.onLine;
+    return `<main class="login-screen"><section class="login-panel"><div class="brand login-brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Dispatch & work orders${isDesktopApp2 ? " \xB7 Windows" : ""}</small></div></div><div class="eyebrow">Secure team access</div><h1>Sign in to your workspace</h1><p>${isDesktopApp2 ? "An internet connection and active subscription are required." : "Use the employee login created by your Administrator. First sign-in requires internet."}</p>${offline ? `<p class="login-error">You appear to be offline. Connect to the internet to sign in.</p>` : ""}<form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required placeholder="you@yourcarguy.com"/></label><label>Password<input name="password" type="password" autocomplete="current-password" required placeholder="Password"/></label><p class="login-error" id="login-error" ${desktopLoginMessage ? "" : "hidden"}>${escapeHtml(desktopLoginMessage || "Incorrect email or password.")}</p><button class="primary" type="submit" ${offline ? "disabled" : ""}>${icon("log-in", 15)} Sign in</button></form><button class="login-reset" type="button" onclick="openPasswordReset()">Forgot password?</button>${isDesktopApp2 ? "" : `<div class="login-downloads"><a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.exe" download>Download MechPro installer (.exe)</a><a class="login-reset" href="./downloads/MechPro-Setup-1.0.0.zip" download>Download portable zip</a></div>`}<div class="login-help"><strong>${isDesktopApp2 ? "Online subscription verification" : "Cognito-backed account"}</strong><span>${isDesktopApp2 ? "Access is checked at sign-in and while the app is running." : "After Cognito sign-in, your email must match an active Employees profile."}</span></div></section></main>`;
   }
   async function platformApi(path, options = {}) {
     const response = await authorizedApiRequest(path, options), body = await response.json().catch(() => ({}));
@@ -2140,7 +2145,7 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
   function render() {
     const root = document.querySelector("#root");
     if (!currentUser()) {
-      root.innerHTML = loginScreen();
+      root.innerHTML = pendingAuthProfile ? pendingProfileScreen() : loginScreen();
       lucide.createIcons();
       bind();
       return;
@@ -2317,7 +2322,11 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
       save();
       render();
       if (x.dataset.route === "customers") await loadCustomersFromApi(), render();
-      if (["dispatch", "orders", "schedule"].includes(x.dataset.route)) await loadOrdersFromApi(), render();
+      if (["dispatch", "orders", "schedule"].includes(x.dataset.route)) {
+        await loadOrdersFromApi();
+        if (x.dataset.route === "schedule") await loadShopEntities();
+        render();
+      }
       if (["invoices", "accounting", "reports"].includes(x.dataset.route)) await Promise.all([loadInvoicesFromApi(), loadPaymentsFromApi(), loadExpensesFromApi()]), render();
       if (x.dataset.route === "ai") await loadEstimatesFromApi(), render();
       if (x.dataset.route === "payroll") await Promise.all([loadShiftEntriesFromApi(), loadJobClockEntriesFromApi(), loadPayrollEntriesFromApi()]), render();
@@ -2525,16 +2534,84 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     bindRows();
     refreshNewOrderEstimate();
   }
+  function techOptions(selected = "Unassigned") {
+    const names = ["Unassigned", ...state.users.filter((user) => user.active && user.techName).map((user) => user.techName)];
+    return [...new Set(names)].map((name) => `<option ${name === selected ? "selected" : ""}>${escapeHtml(name)}</option>`).join("");
+  }
+  function vehicleOptionsForCustomer(customerName, selectedVin = "") {
+    const vehicles = state.vehicles.filter((vehicle) => !customerName || vehicle.customer === customerName);
+    return `<option value="">Enter vehicle manually</option>${vehicles.map((vehicle) => `<option value="${escapeHtml(vehicle.id)}" data-vin="${escapeHtml(vehicle.vin || "")}" data-label="${escapeHtml(vehicleLabel(vehicle))}" ${vehicle.vin && vehicle.vin === selectedVin ? "selected" : ""}>${escapeHtml(vehicleLabel(vehicle))}${vehicle.vin ? ` \xB7 ${escapeHtml(vehicle.vin)}` : ""}</option>`).join("")}`;
+  }
+  function bindNewOrderCustomerPickers() {
+    const form = document.querySelector("#new-form");
+    if (!form) return;
+    const customerSelect = form.elements.customerSelect, customerInput = form.elements.customer, phoneInput = form.elements.phone, vehicleSelect = form.elements.vehicleSelect, vehicleInput = form.elements.vehicle, vinInput = form.elements.vin, vinStatus = document.querySelector("#new-ro-vin-status");
+    const syncCustomer = () => {
+      const name = customerSelect.value;
+      if (name === "__new__") {
+        customerInput.value = "";
+        customerInput.hidden = false;
+        customerInput.required = true;
+        customerInput.focus();
+        vehicleSelect.innerHTML = vehicleOptionsForCustomer("");
+        return;
+      }
+      customerInput.hidden = true;
+      customerInput.required = false;
+      customerInput.value = name;
+      const match = state.customers.find((item) => item.name === name);
+      if (match) phoneInput.value = match.phone || "";
+      vehicleSelect.innerHTML = vehicleOptionsForCustomer(name);
+    };
+    const syncVehicle = () => {
+      const option = vehicleSelect.selectedOptions[0];
+      if (!option || !option.value) {
+        vehicleInput.readOnly = false;
+        return;
+      }
+      vehicleInput.value = option.dataset.label || "";
+      vinInput.value = option.dataset.vin || "";
+      vehicleInput.readOnly = true;
+    };
+    customerSelect.onchange = syncCustomer;
+    vehicleSelect.onchange = syncVehicle;
+    document.querySelector("#new-ro-decode-vin")?.addEventListener("click", async () => {
+      const vin = String(vinInput.value || "").trim().toUpperCase();
+      if (vin.length !== 17) {
+        vinStatus.textContent = "Enter a 17-character VIN";
+        return;
+      }
+      vinStatus.textContent = "Decoding VIN\u2026";
+      try {
+        const data = await apiFetch(`/vehicles/decode/${encodeURIComponent(vin)}`);
+        vehicleInput.value = [data.year, data.make, data.model, data.trim].filter(Boolean).join(" ");
+        vinInput.value = vin;
+        vehicleInput.readOnly = false;
+        vehicleSelect.value = "";
+        vinStatus.textContent = data.cached ? "Cached NHTSA data loaded" : "NHTSA vehicle data loaded";
+      } catch {
+        vinStatus.textContent = "VIN could not be decoded";
+      }
+    });
+    syncCustomer();
+  }
   function openNew() {
-    showModal(`<form class="modal wide" id="new-form"><div class="modal-head"><h2>New work order</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><h3>Customer & vehicle</h3><div class="form-grid"><label>Customer name *<input name="customer" required/></label><label>Phone<input name="phone"/></label><label class="full">Vehicle *<input name="vehicle" required placeholder="Year, make, model, trim"/></label><label class="full">VIN<input name="vin" maxlength="17"/></label></div><h3>Service details</h3><div class="form-grid"><label class="full">Customer complaint *<textarea name="complaint" required></textarea></label><label>Status<select name="status"><option value="estimate">Estimate</option><option value="approved">Approved</option><option value="in_progress">In progress</option></select></label><label>Priority<select name="priority"><option value="normal">Normal</option><option value="high">High</option><option value="low">Low</option></select></label><label>Technician<select name="tech"><option>Unassigned</option><option>Eli R.</option><option>Noah T.</option><option>Sam K.</option><option>Maya L.</option></select></label><label>Assignment<select name="bay"><option>Unassigned</option><option>Bay 1</option><option>Bay 2</option><option>Bay 3</option><option>Bay 4</option><option>Mobile</option></select></label><label>Promise time<input name="promise" value="Tomorrow, 5:00 PM"/></label><label>Estimate total<input id="new-estimate-total" name="total" type="number" value="0.00" readonly/></label></div><h3>AI service estimate</h3><section class="new-order-estimator"><div class="estimator-prompt"><label>Requested services, one per line<textarea name="requestedServices" placeholder="Front brake pads and rotors&#10;Synthetic oil and filter service"></textarea></label><button class="primary" id="generate-new-estimate" type="button">${icon("sparkles", 15)} Generate with AI</button></div><div class="estimator-toolbar"><p>Edit the generated prices and included-work explanations before creating the order.</p><button class="secondary" id="add-estimate-line" type="button">${icon("plus", 14)} Add service</button></div><div id="new-estimate-lines"></div><div class="new-estimate-summary" id="new-estimate-summary"></div></section></div><div class="modal-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">${icon("plus", 15)} Create work order</button></div></form>`);
+    const promiseDefault = relativePromiseHint();
+    showModal(`<form class="modal wide" id="new-form"><div class="modal-head"><h2>New work order</h2><button type="button" class="close" data-close>${icon("x")}</button></div><div class="modal-body"><h3>Customer & vehicle</h3><div class="form-grid"><label>Customer *<select name="customerSelect" required><option value="__new__">+ New customer</option>${customerOptions()}</select></label><label>Customer name (new)<input name="customer" hidden/></label><label>Phone<input name="phone"/></label><label class="full">Linked vehicle<select name="vehicleSelect">${vehicleOptionsForCustomer("")}</select></label><label class="full">Vehicle description *<input name="vehicle" required placeholder="Year, make, model, trim"/></label><label class="full">VIN<input name="vin" maxlength="17" pattern="[A-HJ-NPR-Z0-9]{0,17}"/></label><div class="full vin-actions"><button class="secondary" type="button" id="new-ro-decode-vin">${icon("scan-line", 14)} Decode VIN with NHTSA</button><span id="new-ro-vin-status"></span></div></div><h3>Service details</h3><div class="form-grid"><label class="full">Customer complaint *<textarea name="complaint" required></textarea></label><label>Status<select name="status"><option value="estimate">Estimate</option><option value="approved">Approved</option><option value="in_progress">In progress</option></select></label><label>Priority<select name="priority"><option value="normal">Normal</option><option value="high">High</option><option value="low">Low</option></select></label><label>Technician<select name="tech">${techOptions()}</select></label><label>Assignment<select name="bay"><option>Unassigned</option><option>Bay 1</option><option>Bay 2</option><option>Bay 3</option><option>Bay 4</option><option>Mobile</option></select></label><label>Promise time<input name="promise" value="${escapeHtml(promiseDefault)}"/></label><label>Estimate total<input id="new-estimate-total" name="total" type="number" value="0.00" readonly/></label></div><h3>AI service estimate</h3><section class="new-order-estimator"><div class="estimator-prompt"><label>Requested services, one per line<textarea name="requestedServices" placeholder="Front brake pads and rotors&#10;Synthetic oil and filter service"></textarea></label><button class="primary" id="generate-new-estimate" type="button">${icon("sparkles", 15)} Generate with AI</button></div><div class="estimator-toolbar"><p>Edit the generated prices and included-work explanations before creating the order.</p><button class="secondary" id="add-estimate-line" type="button">${icon("plus", 14)} Add service</button></div><div id="new-estimate-lines"></div><div class="new-estimate-summary" id="new-estimate-summary"></div></section></div><div class="modal-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">${icon("plus", 15)} Create work order</button></div></form>`);
     bindNewOrderEstimator();
+    bindNewOrderCustomerPickers();
     document.querySelector("#new-form").onsubmit = (e) => {
       e.preventDefault();
-      const data = Object.fromEntries(new FormData(e.target)), estimate = readNewOrderEstimate(), id = `RO-${Math.max(...state.orders.map((x) => +x.id.split("-")[1])) + 1}`, order = { id, customer: data.customer, phone: data.phone, vehicle: data.vehicle, vin: data.vin || "VIN pending", complaint: data.complaint, status: data.status, priority: data.priority, tech: data.tech, bay: data.bay, mobile: data.bay === "Mobile", promise: data.promise, total: estimate.total, scheduled: "Unscheduled", notes: "New intake. Diagnosis pending.", labor: estimate.labor, laborHours: estimate.laborHours, parts: estimate.parts, tax: estimate.tax, estimate: { ...estimate, generatedAt: now(), summary: `Preliminary estimate for ${data.vehicle}. Verify vehicle condition, part fitment, and customer authorization before repair.` } };
+      const data = Object.fromEntries(new FormData(e.target)), customerName = String(data.customerSelect === "__new__" ? data.customer : data.customerSelect || data.customer).trim();
+      if (!customerName) {
+        toast("Select or enter a customer name");
+        return;
+      }
+      const estimate = readNewOrderEstimate(), id = `RO-${Math.max(1040, ...state.orders.map((x) => Number(x.id.split("-")[1]) || 0)) + 1}`, order = { id, customer: customerName, phone: data.phone, vehicle: data.vehicle, vin: String(data.vin || "").trim().toUpperCase() || "VIN pending", complaint: data.complaint, status: data.status, priority: data.priority, tech: data.tech, bay: data.bay, mobile: data.bay === "Mobile", promise: data.promise, total: estimate.total, scheduled: "Unscheduled", notes: "New intake. Diagnosis pending.", labor: estimate.labor, laborHours: estimate.laborHours, parts: estimate.parts, tax: estimate.tax, estimate: { ...estimate, generatedAt: now(), summary: `Preliminary estimate for ${data.vehicle}. Verify vehicle condition, part fitment, and customer authorization before repair.` } };
       state.orders.unshift(order);
       pushOrderToApi(order);
-      if (!state.customers.some((x) => x.name.toLowerCase() === data.customer.toLowerCase())) {
-        const record = { name: data.customer, phone: data.phone, email: "Not provided", vehicles: 1, visits: 1, spend: 0 };
+      if (!state.customers.some((x) => x.name.toLowerCase() === customerName.toLowerCase())) {
+        const record = { name: customerName, phone: data.phone, email: "Not provided", vehicles: 1, visits: 1, spend: 0 };
         state.customers.unshift(record);
         pushCustomerToApi(record);
       }
@@ -2576,7 +2653,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
       const item = state.inventory.find((record) => record.id === line.inventoryId || line.inventorySku && record.sku === line.inventorySku);
       return `<p><b>${escapeHtml(item?.sku || line.inventorySku || "Unknown SKU")}</b> \xB7 ${escapeHtml(item?.name || line.service)} \xB7 ${Number(line.committedQuantity || 0)} committed</p>`;
     }).join("")}${x.inventoryDeducted ? `<small>Deducted ${new Date(x.inventoryCommittedAt).toLocaleString()}</small>` : ""}</section>` : "", assignment = canManage ? `<label>Assigned technician<select id="detail-tech"><option>Unassigned</option>${technicians.map((t) => `<option ${t === x.tech ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Labor hours<select id="detail-hours">${[0, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8].map((h) => `<option value="${h}" ${Number(x.laborHours ?? 0) === h ? "selected" : ""}>${h === 0 ? "Not set" : h.toFixed(2) + " hours"}</option>`).join("")}</select></label>` : `<section><h3>Assignment</h3><p>${x.tech} \xB7 ${Number(x.laborHours ?? 0).toFixed(2)} labor hours</p></section>`;
-    showModal(`<div class="modal wide"><div class="modal-head"><div><span class="mono">${x.id}</span><h2>Work order details</h2></div><button class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="detail-hero"><div>${badge(x.status)}<h2>${x.customer}</h2><p>${x.vehicle} \xB7 <span class="mono">${x.vin}</span></p></div><div><div class="amount">${money(x.total)}</div><p>${x.tech} \xB7 ${x.bay}</p></div></div><div class="detail-grid"><div><section><h3>Customer complaint</h3><p>${x.complaint}</p></section><section><h3>Technician notes</h3><p>${x.notes}</p></section><section><h3>Estimate breakdown</h3><p>Labor: ${money(x.labor)} \xB7 ${Number(x.laborHours ?? 0).toFixed(2)} hours<br>Parts & supplies: ${money(x.parts)}<br>Tax: ${money(x.tax)}</p></section>${inventoryMarkup}</div><aside><label>Work status<select id="detail-status" ${canManage ? "" : "disabled"}>${["estimate", "approved", "in_progress", "waiting_parts", "completed", "invoiced"].map((s) => `<option value="${s}" ${s === x.status ? "selected" : ""}>${label(s)}</option>`).join("")}</select></label>${assignment}${jobClockControl}<section><h3>Activity</h3><p>Work order opened \xB7 Aug 14<br>Customer authorization recorded<br>${x.promise}</p></section></aside></div></div><div class="modal-actions">${canManage ? `<button class="secondary danger" id="delete-order">${icon("trash-2", 14)} Delete</button><button class="primary" id="save-order">${icon("save", 14)} Save changes</button>` : `<button class="primary" data-close>Close</button>`}</div></div>`);
+    showModal(`<div class="modal wide"><div class="modal-head"><div><span class="mono">${x.id}</span><h2>Work order details</h2></div><button class="close" data-close>${icon("x")}</button></div><div class="modal-body"><div class="detail-hero"><div>${badge(x.status)}<h2>${x.customer}</h2><p>${x.vehicle} \xB7 <span class="mono">${x.vin}</span></p></div><div><div class="amount">${money(x.total)}</div><p>${x.tech} \xB7 ${x.bay}</p></div></div><div class="detail-grid"><div><section><h3>Customer complaint</h3><p>${x.complaint}</p></section><section><h3>Technician notes</h3><p>${x.notes}</p></section><section><h3>Estimate breakdown</h3><p>Labor: ${money(x.labor)} \xB7 ${Number(x.laborHours ?? 0).toFixed(2)} hours<br>Parts & supplies: ${money(x.parts)}<br>Tax: ${money(x.tax)}</p></section>${inventoryMarkup}</div><aside><label>Work status<select id="detail-status" ${canManage ? "" : "disabled"}>${["estimate", "approved", "in_progress", "waiting_parts", "completed", "invoiced"].map((s) => `<option value="${s}" ${s === x.status ? "selected" : ""}>${label(s)}</option>`).join("")}</select></label>${assignment}${jobClockControl}<section><h3>Activity</h3><p>Opened in shop queue<br>Customer authorization recorded<br>${x.promise}</p></section></aside></div></div><div class="modal-actions">${canManage ? `<button class="secondary danger" id="delete-order">${icon("trash-2", 14)} Delete</button><button class="primary" id="save-order">${icon("save", 14)} Save changes</button>` : `<button class="primary" data-close>Close</button>`}</div></div>`);
     if (canManage) document.querySelector("#save-order").onclick = async (event) => {
       const button = event.currentTarget, nextStatus = document.querySelector("#detail-status").value, terminal = ["completed", "invoiced"], firstCompletion = terminal.includes(nextStatus) && !terminal.includes(x.status);
       button.disabled = true;
@@ -2639,8 +2716,8 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     toast("Weekly payroll register exported");
   }
   function scheduleWorkspace() {
-    const rows = [...state.appointments].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).map((item) => `<tr class="clickable-row" data-edit-appointment="${item.id}"><td><b>${item.date}</b><small>${item.time}</small></td><td>${escapeHtml(item.customer)}<small>${escapeHtml(item.vehicle)}</small></td><td>${escapeHtml(item.service)}</td><td>${escapeHtml(item.tech || "Unassigned")}<small>${escapeHtml(item.bay || "Unassigned")}</small></td><td><span class="badge ${item.status === "completed" ? "paid" : "approved"}">${escapeHtml(item.status)}</span></td><td><button class="mini-action" data-edit-appointment-button="${item.id}">${icon("pencil", 13)} Edit</button></td></tr>`).join("");
-    return shell(`${heading("Shop calendar", "Schedule", "Persisted bay appointments and mobile service calls linked to customers and vehicles.", false)}<div class="ops-actions"><button class="primary" id="add-appointment">${icon("calendar-plus", 14)} New appointment</button></div><div class="data-panel schedule-table"><table><thead><tr><th>Date & time</th><th>Customer & vehicle</th><th>Service</th><th>Assignment</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows || `<tr><td colspan="6">No appointments scheduled.</td></tr>`}</tbody></table></div>`);
+    const rows = [...state.appointments].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).map((item) => `<tr class="clickable-row" data-edit-appointment="${item.id}"><td><b>${escapeHtml(item.date)}</b><small>${escapeHtml(item.time)}</small></td><td>${escapeHtml(item.customer)}<small>${escapeHtml(item.vehicle)}</small></td><td>${escapeHtml(item.service)}</td><td>${escapeHtml(item.tech || "Unassigned")}<small>${escapeHtml(item.bay || "Unassigned")}</small></td><td><span class="badge ${item.status === "completed" ? "paid" : "approved"}">${escapeHtml(item.status)}</span></td><td><button class="mini-action" data-edit-appointment-button="${item.id}">${icon("pencil", 13)} Edit</button></td></tr>`).join("");
+    return shell(`${heading(shopDayLabel(), "Schedule", "Bay appointments and mobile service calls. Add real bookings here \u2014 the decorative week grid has been removed.", false)}<div class="ops-actions"><button class="primary" id="add-appointment">${icon("calendar-plus", 14)} New appointment</button></div><div class="data-panel schedule-table"><table><thead><tr><th>Date & time</th><th>Customer & vehicle</th><th>Service</th><th>Assignment</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows || `<tr><td colspan="6">No appointments scheduled yet. Use <b>New appointment</b> to book the first one.</td></tr>`}</tbody></table></div>`);
   }
   function openAppointmentForm(existing = null) {
     const statuses = ["scheduled", "confirmed", "completed", "cancelled"];
@@ -2730,9 +2807,8 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
       render();
     });
   }
-  var scheduleCore = schedule;
   schedule = function() {
-    return state.appointments ? scheduleWorkspace() : scheduleCore();
+    return scheduleWorkspace();
   };
   newOrderEstimateRow = function(line = { service: "Custom service", notes: "Describe the inspection, labor, parts, and verification included with this service.", hours: 1, parts: 0, discount: 0 }) {
     const inventoryOptions = state.inventory.map((item) => `<option value="${escapeHtml(item.id)}" ${line.inventoryId === item.id ? "selected" : ""}>${escapeHtml(item.sku || "No SKU")} \xB7 ${escapeHtml(item.name)} (${Number(item.quantity || 0)} on hand)</option>`).join("");
@@ -2845,22 +2921,71 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
     attachShopOperationsRoute();
   };
   async function resolveAuthenticatedProfile(tokens, email) {
-    const claims = decodeJwt(tokens.IdToken), normalized = String(claims.email || email).trim().toLowerCase(), role = claims["custom:role"], session = { idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 };
+    const claims = decodeJwt(tokens.IdToken), normalized = String(claims.email || email).trim().toLowerCase(), role = claims["custom:role"] || "technician", session = { idToken: tokens.IdToken, accessToken: tokens.AccessToken, refreshToken: tokens.RefreshToken, shopId: claims["custom:shopId"], expiresAt: Number(claims.exp || 0) * 1e3 };
     sessionStorage.setItem("mechpro-session", JSON.stringify(session));
-    if (role === "super_admin") return state.users.find((user) => String(user.email || "").trim().toLowerCase() === normalized);
-    let employees2 = await apiFetch("/entities/employees"), profile = employees2.find((user) => user.active && String(user.email || "").trim().toLowerCase() === normalized);
-    if (!profile && role === "admin") {
-      profile = await apiFetch("/entities/employees", { method: "POST", body: JSON.stringify({ id: `owner-${claims["custom:shopId"]}`, name: claims.name || normalized.split("@")[0], email: normalized, role: "admin", title: "Owner", department: "Administration", active: true, createdAt: now() }) });
-      employees2 = [...employees2, profile];
+    pendingAuthProfile = null;
+    if (role === "super_admin") {
+      const local = state.users.find((user) => String(user.email || "").trim().toLowerCase() === normalized);
+      if (local) return local;
+      const created = { id: `super-admin-${claims.sub}`, name: claims.name || "Platform Administrator", email: normalized, role: "super_admin", title: "Platform Administrator", active: true };
+      state.users.push(created);
+      save();
+      return created;
     }
+    let employees2 = [];
+    try {
+      employees2 = await apiFetch("/entities/employees");
+    } catch (error) {
+      const local = state.users.find((user) => String(user.email || "").trim().toLowerCase() === normalized);
+      if (local?.active) {
+        state.users = sanitizeUsers(state.users);
+        return local;
+      }
+      throw error;
+    }
+    const active = employees2.find((user) => user.active && String(user.email || "").trim().toLowerCase() === normalized);
+    if (active) {
+      state.users = sanitizeUsers(employees2);
+      return active;
+    }
+    const inactive = employees2.find((user) => !user.active && String(user.email || "").trim().toLowerCase() === normalized);
+    if (inactive) {
+      pendingAuthProfile = { email: normalized, role, reason: "deactivated", name: inactive.name || claims.name || normalized };
+      state.users = sanitizeUsers(employees2);
+      return null;
+    }
+    if (role === "admin") {
+      const profile = await apiFetch("/entities/employees", { method: "POST", body: JSON.stringify({ id: `owner-${claims["custom:shopId"]}`, name: claims.name || normalized.split("@")[0], email: normalized, role: "admin", title: "Owner", department: "Administration", active: true, createdAt: now() }) });
+      state.users = sanitizeUsers([...employees2, profile]);
+      return profile;
+    }
+    const localSeed = state.users.find((user) => user.active && String(user.email || "").trim().toLowerCase() === normalized);
+    if (localSeed) {
+      state.users = sanitizeUsers([...employees2.filter((item) => String(item.email || "").trim().toLowerCase() !== normalized), localSeed]);
+      return localSeed;
+    }
+    pendingAuthProfile = { email: normalized, role, reason: "missing", name: claims.name || normalized.split("@")[0] };
     state.users = sanitizeUsers(employees2);
-    return profile;
+    return null;
+  }
+  function pendingProfileScreen() {
+    const pending = pendingAuthProfile || {};
+    return `<main class="login-screen"><section class="login-panel"><div class="brand login-brand"><div class="brand-mark">${icon("wrench")}</div><div><div class="brand-name">MechPro</div><small>Account almost ready</small></div></div><div class="eyebrow">Employee profile required</div><h1>${pending.reason === "deactivated" ? "Your shop profile is deactivated" : "Ask an admin to finish setup"}</h1><p>${pending.reason === "deactivated" ? `The Cognito login <strong>${escapeHtml(pending.email || "")}</strong> works, but the matching employee profile is inactive.` : `You signed in as <strong>${escapeHtml(pending.email || "")}</strong> (${escapeHtml(roleLabel[pending.role] || pending.role || "team member")}), but this shop does not have an active employee profile for that email yet.`}</p><div class="service-contract"><p>Ask a shop administrator to open <b>Employees</b> and create (or reactivate) a profile using exactly this email:</p><code>${escapeHtml(pending.email || "")}</code></div><div class="modal-actions" style="justify-content:flex-start;margin-top:18px"><button class="primary" id="pending-sign-out">${icon("log-out", 14)} Sign out</button></div></section></main>`;
   }
   var bindBeforeProfileSync = bind;
   bind = function() {
     bindBeforeProfileSync();
     const original = document.querySelector("#login-form");
-    if (!original) return;
+    if (!original) {
+      document.querySelector("#pending-sign-out")?.addEventListener("click", () => {
+        pendingAuthProfile = null;
+        clearAuthSession();
+        state.currentUserId = null;
+        save();
+        render();
+      });
+      return;
+    }
     const form = original.cloneNode(true);
     original.replaceWith(form);
     form.addEventListener("submit", async (event) => {
@@ -2870,6 +2995,7 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
       submitButton.disabled = true;
       desktopEntitlementVerified = !isDesktopApp2;
       try {
+        if (!navigator.onLine) throw new Error("An internet connection is required for the first sign-in.");
         const tokens = await cognitoSignIn(data.email.trim(), data.password);
         if (isDesktopApp2) {
           const claims = decodeJwt(tokens.IdToken);
@@ -2878,23 +3004,24 @@ AI workflow: ${aiResult.diagnostics.causes[0]?.cause || "Inspection required"}`.
         }
         const user = await resolveAuthenticatedProfile(tokens, data.email);
         if (!user) {
-          clearAuthSession();
-          errorEl.textContent = "This login is valid, but an administrator has not created an active employee profile for it.";
-          errorEl.hidden = false;
-          submitButton.disabled = false;
+          state.currentUserId = null;
+          save();
+          render();
           return;
         }
+        pendingAuthProfile = null;
         state.currentUserId = user.id;
         state.route = roleRoutes[user.role]?.[0] || "dispatch";
         query = "";
         save();
-        await Promise.all([loadCustomersFromApi(), loadOrdersFromApi(), loadInvoicesFromApi(), loadPaymentsFromApi(), loadExpensesFromApi(), loadEstimatesFromApi(), loadShiftEntriesFromApi(), loadJobClockEntriesFromApi(), loadPayrollEntriesFromApi()]);
+        await Promise.all([loadCustomersFromApi(), loadOrdersFromApi(), loadInvoicesFromApi(), loadPaymentsFromApi(), loadExpensesFromApi(), loadEstimatesFromApi(), loadShiftEntriesFromApi(), loadJobClockEntriesFromApi(), loadPayrollEntriesFromApi(), loadShopEntities()]);
         render();
       } catch (error) {
         clearAuthSession();
+        pendingAuthProfile = null;
         desktopEntitlementVerified = !isDesktopApp2;
         desktopLoginMessage = isDesktopApp2 && error.message?.includes("subscription") || error.message?.includes("internet") ? error.message : "";
-        errorEl.textContent = desktopLoginMessage || (error.message?.startsWith("API request failed") ? "Your account was authenticated, but its shop profile could not be loaded. Please try again." : "Incorrect email or password.");
+        errorEl.textContent = desktopLoginMessage || (error.message?.startsWith("API request failed") ? "Your account was authenticated, but its shop profile could not be loaded. Please try again." : error.message || "Incorrect email or password.");
         errorEl.hidden = false;
         submitButton.disabled = false;
       }
