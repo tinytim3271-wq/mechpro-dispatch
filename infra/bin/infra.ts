@@ -27,7 +27,7 @@ new ApiStack(app, 'MechProApiStack', {
 // Keep the interim bucket active until AWS verifies CloudFront access for this account.
 const staticSiteStack = new StaticSiteStack(app, 'MechProStaticSiteStack', { env });
 let cdnStack: CdnStack | undefined;
-if (app.node.tryGetContext('enableCustomDomain') === true) {
+if (String(app.node.tryGetContext('enableCustomDomain')).toLowerCase() === 'true') {
   cdnStack = new CdnStack(app, 'MechProCdnStack', { env, domainName: 'www.yourcarguy806.com' });
 }
 

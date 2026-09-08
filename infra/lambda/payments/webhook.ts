@@ -50,11 +50,20 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     if (invoiceNumber && session.metadata?.shopId === shopId && session.payment_status === 'paid' && session.currency === 'usd') {
       const pk = `SHOP#${shopId}`;
       const id = session.id as string;
+      const paymentSk = `PAYMENT#${invoiceNumber}#${id}`;
       const existingPayment = await ddb.send(new GetCommand({
         TableName: TABLE_NAME,
-        Key: { pk, sk: `PAYMENT#${id}` },
+        Key: { pk, sk: paymentSk },
       }));
-      if (existingPayment.Item) return json(200, { received: true, duplicate: true });
+      if (!existingPayment.Item) {
+        const legacyPayment = await ddb.send(new GetCommand({
+          TableName: TABLE_NAME,
+          Key: { pk, sk: `PAYMENT#${id}` },
+        }));
+        if (legacyPayment.Item) return json(200, { received: true, duplicate: true });
+      } else {
+        return json(200, { received: true, duplicate: true });
+      }
       const invoiceResult = await ddb.send(new GetCommand({
         TableName: TABLE_NAME,
         Key: { pk, sk: `INVOICE#${invoiceNumber}` },
@@ -62,17 +71,18 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       if (!invoiceResult.Item) return json(400, { message: 'Invoice not found' });
       let alreadyPaid = 0;
       let lastKey: Record<string, unknown> | undefined;
+      const paymentPrefix = `PAYMENT#${invoiceNumber}#`;
       do {
         const paymentsResult = await ddb.send(new QueryCommand({
           TableName: TABLE_NAME,
           KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
-          ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#' },
-          ProjectionExpression: 'invoiceNumber, amount, #status',
+          ExpressionAttributeValues: { ':pk': pk, ':prefix': paymentPrefix },
+          ProjectionExpression: 'amount, #status',
           ExpressionAttributeNames: { '#status': 'status' },
           ExclusiveStartKey: lastKey,
         }));
         alreadyPaid += (paymentsResult.Items ?? [])
-          .filter(payment => payment.invoiceNumber === invoiceNumber && payment.status === 'completed')
+          .filter(payment => payment.status === 'completed')
           .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
         lastKey = paymentsResult.LastEvaluatedKey as Record<string, unknown> | undefined;
       } while (lastKey);
@@ -84,10 +94,11 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           TableName: TABLE_NAME,
           Item: {
             pk,
-            sk: `PAYMENT#${id}`,
+            sk: paymentSk,
             gsi1pk: `${pk}#TYPE#PAYMENT`,
             gsi1sk: `${new Date().toISOString()}#${id}`,
             id,
+            primarySk: paymentSk,
             invoiceNumber,
             amount,
             method: 'processor',

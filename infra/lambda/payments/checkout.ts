@@ -22,6 +22,14 @@ export function safeCheckoutUrl(value: unknown, requestOrigin: string | undefine
   }
 }
 
+export function originHeader(headers: Record<string, string | undefined> | undefined): string | undefined {
+  if (!headers) return undefined;
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() === 'origin') return value;
+  }
+  return undefined;
+}
+
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
@@ -52,22 +60,23 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     let lastEvaluatedKey: Record<string, unknown> | undefined;
     const payments: Record<string, unknown>[] = [];
+    const paymentPrefix = `PAYMENT#${invoiceNumber}#`;
     do {
       const page = await ddb.send(new QueryCommand({
         TableName: TABLE_NAME,
         KeyConditionExpression: 'pk = :pk and begins_with(sk, :prefix)',
-        ExpressionAttributeValues: { ':pk': pk, ':prefix': 'PAYMENT#' },
-        ProjectionExpression: 'invoiceNumber, amount, #status',
+        ExpressionAttributeValues: { ':pk': pk, ':prefix': paymentPrefix },
+        ProjectionExpression: 'amount, #status',
         ExpressionAttributeNames: { '#status': 'status' },
         ExclusiveStartKey: lastEvaluatedKey as any,
       }));
       lastEvaluatedKey = page.LastEvaluatedKey as any;
-      payments.push(...(page.Items ?? []).filter(payment => payment.invoiceNumber === invoiceNumber));
+      payments.push(...(page.Items ?? []));
     } while (lastEvaluatedKey);
     const balance = openInvoiceBalance(invoice.amount, payments);
     if (balance <= 0) return json(409, { message: 'Invoice has no open balance' });
 
-    const requestOrigin = event.headers.origin;
+    const requestOrigin = originHeader(event.headers);
     const successUrl = safeCheckoutUrl(body.successUrl, requestOrigin);
     const cancelUrl = safeCheckoutUrl(body.cancelUrl, requestOrigin);
     if (!successUrl || !cancelUrl) return json(400, { message: 'Checkout redirects must match the requesting site' });

@@ -20,7 +20,8 @@
     "build:j2534": "bash diagnostics/j2534-service/scripts/publish-win-x64.sh",
     "build:windows": "npm run build:web && npm run build:j2534 && electron-builder --win nsis --publish never",
     "build:windows:zip": "npm run build:web && npm run build:j2534 && electron-builder --win zip --publish never",
-    "test:j2534": "node diagnostics/j2534-host-node/test/host.test.js"
+    "test:j2534": "node diagnostics/j2534-host-node/test/host.test.js",
+    "merge:open-prs": "bash scripts/merge-open-prs.sh"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
