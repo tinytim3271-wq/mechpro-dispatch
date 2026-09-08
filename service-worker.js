@@ -43,7 +43,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Always network-first for the main app bundle — never long-cache app.js.
+  // Always network-first for the main app bundle â never long-cache app.js.
   if (url.pathname.endsWith('/app.js') || url.pathname.endsWith('app.js')) {
     event.respondWith(
       fetch(request)
@@ -76,7 +76,7 @@ self.addEventListener('fetch', event => {
           }
           return response;
         })
-        .catch(async () => (await caches.match(request)) || Response.error()),
+        .catch(async () => (await caches.match(request)) || new Response('', { status: 503, statusText: 'Offline' })),
     );
     return;
   }
