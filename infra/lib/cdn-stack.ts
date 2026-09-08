@@ -57,7 +57,10 @@ export class CdnStack extends Stack {
       domainNames: hasCustomDomain ? [props.domainName!] : undefined,
       certificate,
       webAclId: props.webAclArn,
-      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+      // CloudFront ignores minimumProtocolVersion without a custom cert; omit it in that case so --strict synth stays clean.
+      ...(hasCustomDomain
+        ? { minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021 }
+        : {}),
     });
 
     if (hasCustomDomain && hostedZone) {
