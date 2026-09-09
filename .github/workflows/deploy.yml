@@ -28,6 +28,8 @@ jobs:
       - run: npm run build:web
       - run: npm run test:config
       - run: test -f app.js
+      - run: npm run test:j2534
+      - run: python3 -m unittest discover -s diagnostics/voice-service/tests -v
 
   validate:
     runs-on: ubuntu-latest
