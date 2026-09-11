@@ -2317,19 +2317,33 @@ ${lines.join("\n")}`, raw: rawResponses.join("\n\n") };
         submitButton.disabled = false;
       }
     });
-    document.querySelectorAll("[data-route]").forEach((x) => x.onclick = async () => {
-      state.route = x.dataset.route;
-      save();
-      render();
-      if (x.dataset.route === "customers") await loadCustomersFromApi(), render();
-      if (["dispatch", "orders", "schedule"].includes(x.dataset.route)) {
-        await loadOrdersFromApi();
-        if (x.dataset.route === "schedule") await loadShopEntities();
+    document.querySelectorAll("[data-route]").forEach((x) => {
+      x.onclick = async () => {
+        state.route = x.dataset.route;
+        save();
         render();
-      }
-      if (["invoices", "accounting", "reports"].includes(x.dataset.route)) await Promise.all([loadInvoicesFromApi(), loadPaymentsFromApi(), loadExpensesFromApi()]), render();
-      if (x.dataset.route === "ai") await loadEstimatesFromApi(), render();
-      if (x.dataset.route === "payroll") await Promise.all([loadShiftEntriesFromApi(), loadJobClockEntriesFromApi(), loadPayrollEntriesFromApi()]), render();
+        if (x.dataset.route === "customers") {
+          await loadCustomersFromApi();
+          render();
+        }
+        if (["dispatch", "orders", "schedule"].includes(x.dataset.route)) {
+          await loadOrdersFromApi();
+          if (x.dataset.route === "schedule") await loadShopEntities();
+          render();
+        }
+        if (["invoices", "accounting", "reports"].includes(x.dataset.route)) {
+          await Promise.all([loadInvoicesFromApi(), loadPaymentsFromApi(), loadExpensesFromApi()]);
+          render();
+        }
+        if (x.dataset.route === "ai") {
+          await loadEstimatesFromApi();
+          render();
+        }
+        if (x.dataset.route === "payroll") {
+          await Promise.all([loadShiftEntriesFromApi(), loadJobClockEntriesFromApi(), loadPayrollEntriesFromApi()]);
+          render();
+        }
+      };
     });
     document.querySelectorAll("[data-filter]").forEach((x) => x.onclick = () => {
       filter = x.dataset.filter;

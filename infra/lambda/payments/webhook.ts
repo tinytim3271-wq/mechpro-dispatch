@@ -97,7 +97,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
             pk,
             sk: paymentSk,
             gsi1pk: `${pk}#TYPE#PAYMENT`,
-            gsi1sk: paymentGsiSortKey(String(invoiceNumber), new Date().toISOString(), String(id)),
+            gsi1sk: paymentGsiSortKey(invoiceNumber, new Date().toISOString(), id),
             id,
             primarySk: paymentSk,
             invoiceNumber,

@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package com.mechpro.dispatch;
 
 import static org.junit.Assert.*;
 

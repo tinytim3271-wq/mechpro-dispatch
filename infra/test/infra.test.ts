@@ -411,6 +411,11 @@ describe('payment integrity', () => {
 			.toBe('INV-7#2026-08-17T12:00:00.000Z#pay_123');
 		expect(paymentGsiSortKey('', '2026-08-17T12:00:00.000Z', 'pay_456'))
 			.toBe('2026-08-17T12:00:00.000Z#pay_456');
+		// Callers must pass raw values; String(undefined) would wrongly yield "undefined#..."
+		expect(paymentGsiSortKey(undefined, '2026-08-17T12:00:00.000Z', 'pay_789'))
+			.toBe('2026-08-17T12:00:00.000Z#pay_789');
+		expect(paymentGsiSortKey(undefined, '2026-08-17T12:00:00.000Z', undefined))
+			.toBe('2026-08-17T12:00:00.000Z#');
 	});
 
 	test('verifies AgentPhone signatures and rejects stale deliveries', () => {

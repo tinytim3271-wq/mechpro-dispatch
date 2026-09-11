@@ -82,6 +82,6 @@ Workbench panel to paste the transcript directly.
 
 ```bash
 python3 diagnostics/voice-service/tests/test_voice_service.py
-# optional if pytest is installed:
+# optional if you already use pytest:
 python3 -m pytest diagnostics/voice-service/tests/ -v
 ```
